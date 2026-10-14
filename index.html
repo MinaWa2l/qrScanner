@@ -51,11 +51,13 @@ li a{color:var(--accent)}
 li button{min-height:36px;padding:6px 10px;font-size:.85rem}
 .empty{color:var(--muted);padding:14px 0}
 input[type=file]{display:none}
+input[type=text]{font:inherit;flex:1;min-width:0;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:10px 12px;border-radius:10px;min-height:44px}
+input[type=text]:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 </style>
 </head>
 <body>
 <main>
-  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v3</small></h1>
+  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v4</small></h1>
 
   <div class="cam" id="cam">
     <video id="video" playsinline muted></video>
@@ -69,6 +71,10 @@ input[type=file]{display:none}
     <input type="file" id="pic" accept="image/*" capture="environment">
   </div>
   <p class="status" id="status" role="status"></p>
+  <div class="row">
+    <input type="text" id="manual" dir="auto" placeholder="Type a name (no QR code)" autocomplete="off" enterkeyhint="done" aria-label="Type a name">
+    <button id="addManual">Add</button>
+  </div>
 
   <div class="head">
     <h2>Scanned codes</h2>
@@ -10222,22 +10228,25 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
       if (isUrl(it.text)){
         var a = document.createElement('a'); a.href = it.text; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = it.text; box.appendChild(a);
       } else { box.appendChild(document.createTextNode(it.text)); }
-      var t = document.createElement('span'); t.className = 'time'; t.textContent = new Date(it.t).toLocaleString(); box.appendChild(t);
+      var t = document.createElement('span'); t.className = 'time'; t.textContent = new Date(it.t).toLocaleString() + (it.m ? ' (typed)' : ''); box.appendChild(t);
       var del = document.createElement('button'); del.textContent = 'Delete'; del.setAttribute('aria-label','Delete this entry');
       del.onclick = function(){ items.splice(i,1); save(); render(); };
       li.appendChild(box); li.appendChild(del); listEl.appendChild(li);
     });
   }
 
-  function add(text){
+  function add(text, manual){
+    if (manual) text = String(text).replace(/\s+/g, ' ').trim();
+    if (!text) return;
     var now = Date.now();
     var exists = items.some(function(it){ return it.text === text; });
     if (exists){
-      if (text !== lastText) setStatus('Already in the list: ' + (text.length > 60 ? text.slice(0,60) + '\u2026' : text), true);
+      if (manual || text !== lastText) setStatus('Already in the list: ' + (text.length > 60 ? text.slice(0,60) + '\u2026' : text), true);
       lastText = text; lastTime = now; return;
     }
     lastText = text; lastTime = now;
-    items.unshift({ text: text, t: now });
+    var entry = { text: text, t: now }; if (manual) entry.m = 1;
+    items.unshift(entry);
     save(); render();
     if (navigator.vibrate) { try { navigator.vibrate(60); } catch (e) {} }
     cam.classList.add('flash'); setTimeout(function(){ cam.classList.remove('flash'); }, 250);
@@ -10319,6 +10328,17 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
     if (!items.length) return;
     if (confirm('Delete all ' + items.length + ' scanned codes?')){ items = []; save(); render(); setStatus('List cleared.'); }
   };
+
+  var manualEl = document.getElementById('manual');
+  function addManual(){
+    if (!manualEl.value.trim()){ setStatus('Type a name first.', true); manualEl.focus(); return; }
+    var before = items.length;
+    add(manualEl.value, true);
+    if (items.length > before) manualEl.value = '';
+    manualEl.focus();
+  }
+  document.getElementById('addManual').onclick = addManual;
+  manualEl.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); addManual(); } });
 
   load(); render();
 })();
