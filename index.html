@@ -1191,7 +1191,7 @@ exports.BitStream = BitStream;
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
-
+ 
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.shiftJISTable = {
     0x20: 0x0020,
@@ -10235,7 +10235,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
     });
   }
 
-  function add(text, manual){
+function add(text, manual){
     if (manual) text = String(text).replace(/\s+/g, ' ').trim();
     if (!text) return;
     var now = Date.now();
@@ -10251,6 +10251,17 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
     if (navigator.vibrate) { try { navigator.vibrate(60); } catch (e) {} }
     cam.classList.add('flash'); setTimeout(function(){ cam.classList.remove('flash'); }, 250);
     setStatus('Added: ' + (text.length > 60 ? text.slice(0,60) + '…' : text));
+
+    // Send to Google Sheet
+    try {
+      if (manual && typeof onManualName === 'function') {
+        onManualName(text);
+      } else if (!manual && typeof onScan === 'function') {
+        onScan(text);
+      }
+    } catch (e) {
+      console.error('Sheet sync error:', e);
+    }
   }
 
   function decodeCanvas(){
@@ -10345,5 +10356,67 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
 </script>
 
 <script>try{if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){navigator.serviceWorker.register('sw.js');}}catch(e){}</script>
+<script>
+	// Paste this into your scanner app's JS, then call onScan(code) / onManualName(name)
+
+const API_URL = 'https://script.google.com/macros/s/AKfycbwAE_xO0K_z96yolnu9udi0BytNq_4yRn3z-sUgdmtS1QjtLH21Hw5TwbUJERRrpINSYw/exec';
+
+function getQueue() {
+  try { return JSON.parse(localStorage.getItem('attQueue') || '[]'); }
+  catch { return []; }
+}
+function saveQueue(q) { localStorage.setItem('attQueue', JSON.stringify(q)); }
+
+async function sendToSheet(item) {
+  const res = await fetch(API_URL + '?' + new URLSearchParams(item));
+  return res.json(); // { ok, name, already } or { ok:false, error }
+}
+
+// Try to send immediately; if offline/failed, keep it in the queue
+async function submit(item) {
+  try {
+    return await sendToSheet(item);
+  } catch (e) {
+    const q = getQueue();
+    q.push(item);
+    saveQueue(q);
+    return { ok: false, queued: true };
+  }
+}
+
+// Send everything saved while offline
+async function flushQueue() {
+  const q = getQueue();
+  const stillPending = [];
+  for (const item of q) {
+    try { await sendToSheet(item); }
+    catch (e) { stillPending.push(item); }
+  }
+  saveQueue(stillPending);
+}
+window.addEventListener('online', flushQueue);
+window.addEventListener('load', flushQueue);
+
+// ---- call these from your app ----
+async function onScan(code) {
+  const result = await submit({ code: code });
+  showResult(result);
+}
+async function onManualName(name) {
+  const result = await submit({ name: name });
+  showResult(result);
+}
+
+// Replace with your own UI code
+function showResult(r) {
+  if (r.queued) alert('Offline: saved, will sync later');
+  else if (r.ok && r.already) alert('Already checked: ' + r.name);
+  else if (r.ok) alert('Checked ✔ ' + r.name);
+  else alert('Problem: ' + r.error);
+}
+
+</script>
+
+	
 </body>
 </html>
