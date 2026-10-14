@@ -10231,7 +10231,11 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
 
   function add(text){
     var now = Date.now();
-    if (text === lastText && now - lastTime < 3000){ lastTime = now; return; }
+    var exists = items.some(function(it){ return it.text === text; });
+    if (exists){
+      if (text !== lastText) setStatus('Already in the list: ' + (text.length > 60 ? text.slice(0,60) + '\u2026' : text), true);
+      lastText = text; lastTime = now; return;
+    }
     lastText = text; lastTime = now;
     items.unshift({ text: text, t: now });
     save(); render();
