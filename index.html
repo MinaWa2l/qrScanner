@@ -10393,19 +10393,32 @@ async function submit(item) {
   }
 }
 
-// Send everything saved while offline
+// Send everything saved while offline and turn ☁ (Offline) into ✔
 async function flushQueue() {
   const q = getQueue();
+  if (!q.length) return;
+
   const stillPending = [];
   for (const item of q) {
-    try { await sendToSheet(item); }
-    catch (e) { stillPending.push(item); }
+    try {
+      const res = await sendToSheet(item);
+      const val = item.code || item.name;
+      if (res && res.ok) {
+        updateItemStatus(val, '✔', 'ok');
+      } else {
+        stillPending.push(item);
+      }
+    } catch (e) {
+      stillPending.push(item);
+    }
   }
   saveQueue(stillPending);
 }
+
+// Automatically retries every 5 seconds, on reconnect, and on page load
+setInterval(flushQueue, 5000);
 window.addEventListener('online', flushQueue);
 window.addEventListener('load', flushQueue);
-
 // ---- call these from your app ----
 async function onScan(code) {
   updateItemStatus(code, '⌛', 'syncing');
