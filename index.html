@@ -9,6 +9,15 @@
 <link rel="icon" href="icon-192.png">
 
 <style>
+	.sync-status {
+  margin-left: 8px;
+  font-weight: 700;
+  font-size: 1rem;
+}
+.sync-status.ok { color: var(--accent); }
+.sync-status.already { color: #f59e0b; }
+.sync-status.err { color: var(--danger); }
+.sync-status.syncing { color: var(--muted); font-size: 0.8rem; }
 :root{
   --bg:#f3f5f2; --surface:#ffffff; --ink:#16211b; --muted:#5d6b63; --line:#d6ddd8; --accent:#0f7a4f; --accent-ink:#ffffff; --danger:#b3261e;
   color-scheme: light;
@@ -10399,20 +10408,46 @@ window.addEventListener('load', flushQueue);
 
 // ---- call these from your app ----
 async function onScan(code) {
+  updateItemStatus(code, '⌛', 'syncing');
   const result = await submit({ code: code });
-  showResult(result);
-}
-async function onManualName(name) {
-  const result = await submit({ name: name });
-  showResult(result);
+  showResult(code, result);
 }
 
-// Replace with your own UI code
-function showResult(r) {
-  if (r.queued) alert('Offline: saved, will sync later');
-  else if (r.ok && r.already) alert('Already checked: ' + r.name);
-  else if (r.ok) alert('Checked ✔ ' + r.name);
-  else alert('Problem: ' + r.error);
+async function onManualName(name) {
+  updateItemStatus(name, '⌛', 'syncing');
+  const result = await submit({ name: name });
+  showResult(name, result);
+}
+
+// Replaces alert with a checkmark / status icon in the UI list
+function showResult(text, r) {
+  if (r.queued) {
+    updateItemStatus(text, '☁ (Offline)', 'syncing');
+  } else if (r.ok && r.already) {
+    updateItemStatus(text, '✔ (Already)', 'already');
+  } else if (r.ok) {
+    updateItemStatus(text, '✔', 'ok');
+  } else {
+    updateItemStatus(text, '✖ (' + (r.error || 'Failed') + ')', 'err');
+  }
+}
+
+// Helper to find the list item and attach/update the badge
+function updateItemStatus(text, badgeText, statusClass) {
+  var listItems = document.querySelectorAll('#list li');
+  listItems.forEach(function(li) {
+    var txtEl = li.querySelector('.txt');
+    if (txtEl && txtEl.textContent.includes(text)) {
+      var badge = txtEl.querySelector('.sync-status');
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'sync-status';
+        txtEl.insertBefore(badge, txtEl.querySelector('.time'));
+      }
+      badge.textContent = ' ' + badgeText;
+      badge.className = 'sync-status ' + (statusClass || '');
+    }
+  });
 }
 
 </script>
