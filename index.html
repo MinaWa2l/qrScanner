@@ -66,7 +66,7 @@ input[type=text]:focus-visible{outline:3px solid var(--accent);outline-offset:2p
 </head>
 <body>
 <main>
-  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v7</small></h1>
+  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v8</small></h1>
 
   <div class="cam" id="cam">
     <video id="video" playsinline muted></video>
@@ -90,9 +90,17 @@ input[type=text]:focus-visible{outline:3px solid var(--accent);outline-offset:2p
     <button id="addManual">Add</button>
   </div>
 
-  <div class="head">
-    <h2>Scanned codes</h2>
-    <span class="count" id="count">0</span>
+<!-- Live Attendance Stats Pill -->
+  <div style="display:flex; justify-content:space-between; align-items:center; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:10px 14px; margin: 10px 0;">
+    <span style="font-size:0.9rem; color:var(--muted)">Live Sheet Attendance:</span>
+    <span id="sheetStats" style="font-weight:700; color:var(--accent); font-size:1rem;">-- / --</span>
+  </div>
+
+  <div class="row">
+    <!-- input linked to namesList datalist for auto-suggest -->
+    <input type="text" id="manual" list="namesList" dir="auto" placeholder="Type a name (auto-suggests)" autocomplete="off" enterkeyhint="done" aria-label="Type a name">
+    <datalist id="namesList"></datalist>
+    <button id="addManual">Add</button>
   </div>
   <div class="row">
     <button id="copyAll">Copy all</button>
@@ -10424,6 +10432,43 @@ async function flushQueue() {
 setInterval(flushQueue, 5000);
 window.addEventListener('online', flushQueue);
 window.addEventListener('load', flushQueue);
+
+	// ---- Fetch all names for auto-suggest & live stats on load ----
+async function loadSheetMetadata() {
+  const statsEl = document.getElementById('sheetStats');
+  try {
+    const session = document.getElementById('sessionSelect') ? document.getElementById('sessionSelect').value : '';
+    const res = await fetch(API_URL + '?action=getMeta&session=' + encodeURIComponent(session));
+    const data = await res.json();
+    
+    if (data.ok) {
+      // 1) Update Attendance Counter (e.g., 25 / 80)
+      statsEl.textContent = data.present + ' / ' + data.total;
+      
+      // 2) Populate Auto-Suggest Datalist
+      const dl = document.getElementById('namesList');
+      if (dl && data.names) {
+        dl.innerHTML = '';
+        data.names.forEach(function(name) {
+          const opt = document.createElement('option');
+          opt.value = name;
+          dl.appendChild(opt);
+        });
+      }
+    }
+  } catch (e) {
+    statsEl.textContent = 'Offline';
+  }
+}
+
+// Call on startup
+window.addEventListener('load', loadSheetMetadata);
+
+// If using session selector, reload stats when session switches
+const sessionDropdown = document.getElementById('sessionSelect');
+if (sessionDropdown) {
+  sessionDropdown.addEventListener('change', loadSheetMetadata);
+}
 // ---- call these from your app ----
 async function onScan(code) {
   var session = document.getElementById('sessionSelect').value;
@@ -10439,7 +10484,6 @@ async function onManualName(name) {
   showResult(name, result);
 }
 
-// Replaces alert with a checkmark / status icon in the UI list
 function showResult(text, r) {
   if (r.queued) {
     updateItemStatus(text, '☁ (Offline)', 'syncing');
@@ -10447,6 +10491,19 @@ function showResult(text, r) {
     updateItemStatus(text, '✔ (Already)', 'already');
   } else if (r.ok) {
     updateItemStatus(text, '✔', 'ok');
+    
+    // Increment the live present count on screen immediately
+    const statsEl = document.getElementById('sheetStats');
+    if (statsEl) {
+      const parts = statsEl.textContent.split('/');
+      if (parts.length === 2) {
+        let present = parseInt(parts[0].trim(), 10);
+        const total = parts[1].trim();
+        if (!isNaN(present)) {
+          statsEl.textContent = (present + 1) + ' / ' + total;
+        }
+      }
+    }
   } else {
     updateItemStatus(text, '✖ (' + (r.error || 'Failed') + ')', 'err');
   }
