@@ -66,7 +66,7 @@ input[type=text]:focus-visible{outline:3px solid var(--accent);outline-offset:2p
 </head>
 <body>
 <main>
-  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v9</small></h1>
+  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v9.5</small></h1>
 
   <div class="cam" id="cam">
     <video id="video" playsinline muted></video>
@@ -10257,13 +10257,21 @@ function add(text, manual){
     if (manual) text = String(text).replace(/\s+/g, ' ').trim();
     if (!text) return;
     var now = Date.now();
-    var exists = items.some(function(it){ return it.text === text; });
+
+    // Duplicates are only blocked within the SAME session on the SAME day
+    var sessionEl = document.getElementById('sessionSelect');
+    var session = sessionEl ? sessionEl.value : '';
+    var day = new Date().toLocaleDateString('en-CA'); // e.g. 2026-10-15 (local date)
+
+    var exists = items.some(function(it){
+      return it.text === text && it.s === session && it.d === day;
+    });
     if (exists){
       if (manual || text !== lastText) setStatus('Already in the list: ' + (text.length > 60 ? text.slice(0,60) + '\u2026' : text), true);
       lastText = text; lastTime = now; return;
     }
     lastText = text; lastTime = now;
-    var entry = { text: text, t: now }; if (manual) entry.m = 1;
+    var entry = { text: text, t: now, s: session, d: day }; if (manual) entry.m = 1;
     items.unshift(entry);
     save(); render();
     if (navigator.vibrate) { try { navigator.vibrate(60); } catch (e) {} }
@@ -10281,6 +10289,12 @@ function add(text, manual){
       console.error('Sheet sync error:', e);
     }
   }
+
+/* OPTIONAL: in render(), change the line that sets t.textContent to this,
+   so each entry shows which session it belongs to:
+
+   t.textContent = new Date(it.t).toLocaleString() + (it.s ? ' · ' + it.s : '') + (it.m ? ' (typed)' : '');
+*/
 
   function decodeCanvas(){
     var d = ctx.getImageData(0, 0, canvas.width, canvas.height);
