@@ -66,7 +66,7 @@ input[type=text]:focus-visible{outline:3px solid var(--accent);outline-offset:2p
 </head>
 <body>
 <main>
-  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v8</small></h1>
+  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v9</small></h1>
 
   <div class="cam" id="cam">
     <video id="video" playsinline muted></video>
@@ -84,20 +84,16 @@ input[type=text]:focus-visible{outline:3px solid var(--accent);outline-offset:2p
     <label class="btn" for="pic">Scan a photo</label>
     <input type="file" id="pic" accept="image/*" capture="environment">
   </div>
-  <p class="status" id="status" role="status"></p>
-  <div class="row">
-    <input type="text" id="manual" dir="auto" placeholder="Type a name (no QR code)" autocomplete="off" enterkeyhint="done" aria-label="Type a name">
-    <button id="addManual">Add</button>
-  </div>
+ <p class="status" id="status" role="status"></p>
 
-<!-- Live Attendance Stats Pill -->
+  <!-- Live Attendance Stats Pill -->
   <div style="display:flex; justify-content:space-between; align-items:center; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:10px 14px; margin: 10px 0;">
     <span style="font-size:0.9rem; color:var(--muted)">Live Sheet Attendance:</span>
     <span id="sheetStats" style="font-weight:700; color:var(--accent); font-size:1rem;">-- / --</span>
   </div>
 
+  <!-- Single Auto-Suggest Input -->
   <div class="row">
-    <!-- input linked to namesList datalist for auto-suggest -->
     <input type="text" id="manual" list="namesList" dir="auto" placeholder="Type a name (auto-suggests)" autocomplete="off" enterkeyhint="done" aria-label="Type a name">
     <datalist id="namesList"></datalist>
     <button id="addManual">Add</button>
@@ -10357,9 +10353,15 @@ function add(text, manual){
       document.body.removeChild(ta);
     }
   };
-  document.getElementById('clear').onclick = function(){
+document.getElementById('clear').onclick = function(){
     if (!items.length) return;
-    if (confirm('Delete all ' + items.length + ' scanned codes?')){ items = []; save(); render(); setStatus('List cleared.'); }
+    if (confirm('Clear local list of ' + items.length + ' scanned codes?')){ 
+      items = []; 
+      save(); 
+      render(); 
+      lastText = ''; 
+      setStatus('Local list cleared.'); 
+    }
   };
 
   var manualEl = document.getElementById('manual');
