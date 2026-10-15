@@ -66,7 +66,7 @@ input[type=text]:focus-visible{outline:3px solid var(--accent);outline-offset:2p
 </head>
 <body>
 <main>
-  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v9.5</small></h1>
+  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v10</small></h1>
 
   <div class="cam" id="cam">
     <video id="video" playsinline muted></video>
@@ -84,18 +84,15 @@ input[type=text]:focus-visible{outline:3px solid var(--accent);outline-offset:2p
     <label class="btn" for="pic">Scan a photo</label>
     <input type="file" id="pic" accept="image/*" capture="environment">
   </div>
- <p class="status" id="status" role="status"></p>
-
-  <!-- Live Attendance Stats Pill -->
-  <div style="display:flex; justify-content:space-between; align-items:center; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:10px 14px; margin: 10px 0;">
-    <span style="font-size:0.9rem; color:var(--muted)">Live Sheet Attendance:</span>
-    <span id="sheetStats" style="font-weight:700; color:var(--accent); font-size:1rem;">-- / --</span>
+<p class="status" id="status" role="status"></p>
+  <div class="row">
+    <input type="text" id="manual" dir="auto" placeholder="Type a name (no QR code)" autocomplete="off" enterkeyhint="done" aria-label="Type a name">
+    <button id="addManual">Add</button>
   </div>
 
-  <!-- Single Auto-Suggest Input -->
-  <div class="row">
-    <input type="text" id="manual" list="namesList" dir="auto" placeholder="Type a name (auto-suggests)" autocomplete="off" enterkeyhint="done" aria-label="Type a name">
-    <datalist id="namesList"></datalist>
+<!-- Live Attendance Stats Pill -->
+<div class="row">
+    <input type="text" id="manual" dir="auto" placeholder="Type a name (no QR code)" autocomplete="off" enterkeyhint="done" aria-label="Type a name">
     <button id="addManual">Add</button>
   </div>
   <div class="row">
@@ -10257,21 +10254,13 @@ function add(text, manual){
     if (manual) text = String(text).replace(/\s+/g, ' ').trim();
     if (!text) return;
     var now = Date.now();
-
-    // Duplicates are only blocked within the SAME session on the SAME day
-    var sessionEl = document.getElementById('sessionSelect');
-    var session = sessionEl ? sessionEl.value : '';
-    var day = new Date().toLocaleDateString('en-CA'); // e.g. 2026-10-15 (local date)
-
-    var exists = items.some(function(it){
-      return it.text === text && it.s === session && it.d === day;
-    });
+    var exists = items.some(function(it){ return it.text === text; });
     if (exists){
       if (manual || text !== lastText) setStatus('Already in the list: ' + (text.length > 60 ? text.slice(0,60) + '\u2026' : text), true);
       lastText = text; lastTime = now; return;
     }
     lastText = text; lastTime = now;
-    var entry = { text: text, t: now, s: session, d: day }; if (manual) entry.m = 1;
+    var entry = { text: text, t: now }; if (manual) entry.m = 1;
     items.unshift(entry);
     save(); render();
     if (navigator.vibrate) { try { navigator.vibrate(60); } catch (e) {} }
@@ -10289,12 +10278,6 @@ function add(text, manual){
       console.error('Sheet sync error:', e);
     }
   }
-
-/* OPTIONAL: in render(), change the line that sets t.textContent to this,
-   so each entry shows which session it belongs to:
-
-   t.textContent = new Date(it.t).toLocaleString() + (it.s ? ' · ' + it.s : '') + (it.m ? ' (typed)' : '');
-*/
 
   function decodeCanvas(){
     var d = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -10369,13 +10352,7 @@ function add(text, manual){
   };
 document.getElementById('clear').onclick = function(){
     if (!items.length) return;
-    if (confirm('Clear local list of ' + items.length + ' scanned codes?')){ 
-      items = []; 
-      save(); 
-      render(); 
-      lastText = ''; 
-      setStatus('Local list cleared.'); 
-    }
+    if (confirm('Delete all ' + items.length + ' scanned codes?')){ items = []; save(); render(); setStatus('List cleared.'); }
   };
 
   var manualEl = document.getElementById('manual');
@@ -10449,42 +10426,7 @@ setInterval(flushQueue, 5000);
 window.addEventListener('online', flushQueue);
 window.addEventListener('load', flushQueue);
 
-	// ---- Fetch all names for auto-suggest & live stats on load ----
-async function loadSheetMetadata() {
-  const statsEl = document.getElementById('sheetStats');
-  try {
-    const session = document.getElementById('sessionSelect') ? document.getElementById('sessionSelect').value : '';
-    const res = await fetch(API_URL + '?action=getMeta&session=' + encodeURIComponent(session));
-    const data = await res.json();
-    
-    if (data.ok) {
-      // 1) Update Attendance Counter (e.g., 25 / 80)
-      statsEl.textContent = data.present + ' / ' + data.total;
-      
-      // 2) Populate Auto-Suggest Datalist
-      const dl = document.getElementById('namesList');
-      if (dl && data.names) {
-        dl.innerHTML = '';
-        data.names.forEach(function(name) {
-          const opt = document.createElement('option');
-          opt.value = name;
-          dl.appendChild(opt);
-        });
-      }
-    }
-  } catch (e) {
-    statsEl.textContent = 'Offline';
-  }
-}
 
-// Call on startup
-window.addEventListener('load', loadSheetMetadata);
-
-// If using session selector, reload stats when session switches
-const sessionDropdown = document.getElementById('sessionSelect');
-if (sessionDropdown) {
-  sessionDropdown.addEventListener('change', loadSheetMetadata);
-}
 // ---- call these from your app ----
 async function onScan(code) {
   var session = document.getElementById('sessionSelect').value;
@@ -10507,19 +10449,6 @@ function showResult(text, r) {
     updateItemStatus(text, '✔ (Already)', 'already');
   } else if (r.ok) {
     updateItemStatus(text, '✔', 'ok');
-    
-    // Increment the live present count on screen immediately
-    const statsEl = document.getElementById('sheetStats');
-    if (statsEl) {
-      const parts = statsEl.textContent.split('/');
-      if (parts.length === 2) {
-        let present = parseInt(parts[0].trim(), 10);
-        const total = parts[1].trim();
-        if (!isNaN(present)) {
-          statsEl.textContent = (present + 1) + ' / ' + total;
-        }
-      }
-    }
   } else {
     updateItemStatus(text, '✖ (' + (r.error || 'Failed') + ')', 'err');
   }
