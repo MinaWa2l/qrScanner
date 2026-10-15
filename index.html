@@ -73,7 +73,12 @@ input[type=text]:focus-visible{outline:3px solid var(--accent);outline-offset:2p
     <div class="frame"></div>
     <div class="hint">Tap “Start camera”, then point it at a QR code.</div>
   </div>
-
+<div class="row">
+    <select id="sessionSelect" style="flex:1; min-height:44px; padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:var(--surface); color:var(--ink); font:inherit;">
+      <option value="Session 1">Session 1</option>
+      <option value="Session 2">Session 2</option>
+    </select>
+  </div>
   <div class="row">
     <button class="primary" id="toggle">Start camera</button>
     <label class="btn" for="pic">Scan a photo</label>
@@ -10421,14 +10426,16 @@ window.addEventListener('online', flushQueue);
 window.addEventListener('load', flushQueue);
 // ---- call these from your app ----
 async function onScan(code) {
+  var session = document.getElementById('sessionSelect').value;
   updateItemStatus(code, '⌛', 'syncing');
-  const result = await submit({ code: code });
+  const result = await submit({ code: code, session: session });
   showResult(code, result);
 }
 
 async function onManualName(name) {
+  var session = document.getElementById('sessionSelect').value;
   updateItemStatus(name, '⌛', 'syncing');
-  const result = await submit({ name: name });
+  const result = await submit({ name: name, session: session });
   showResult(name, result);
 }
 
