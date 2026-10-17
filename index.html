@@ -66,7 +66,7 @@ input[type=text]:focus-visible{outline:3px solid var(--accent);outline-offset:2p
 </head>
 <body>
 <main>
-  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v13</small></h1>
+  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v13.1</small></h1>
 
   <div class="cam" id="cam">
     <video id="video" playsinline muted></video>
@@ -10329,38 +10329,62 @@ async function start(){
       setStatus('Camera not available here. Use “Scan a photo” instead.', true); return;
     }
     try {
-      var constraints = { video: { facingMode: { ideal: 'environment' } }, audio: false };
+      let activeStream = null;
+      let activeTrack = null;
+      let activeCaps = {};
 
-      // Try to find the exact primary rear camera on multi-lens phones like the S24 Ultra
+      // 1. Loop through available cameras to find the one that explicitly supports the flashlight (torch)
       if (navigator.mediaDevices.enumerateDevices) {
         try {
           var devices = await navigator.mediaDevices.enumerateDevices();
           var videoDevices = devices.filter(function(d){ return d.kind === 'videoinput'; });
           
-          // Filter for back/rear cameras
+          // Prioritize back/rear cameras
           var backCameras = videoDevices.filter(function(d){
             return /back|rear|environment|0/i.test(d.label);
           });
+          var candidates = backCameras.length > 0 ? backCameras : videoDevices;
 
-          if (backCameras.length > 0) {
-            // Usually, the primary main camera is the first back camera or has 'back' / '0' in its label.
-            // We request it by deviceId to bypass the ultrawide lens default.
-            constraints = {
-              video: {
-                deviceId: { exact: backCameras[0].deviceId },
-                width: { ideal: 1920 },
-                height: { ideal: 1080 }
-              },
-              audio: false
-            };
+          for (var i = 0; i < candidates.length; i++) {
+            try {
+              var testStream = await navigator.mediaDevices.getUserMedia({
+                video: { deviceId: { exact: candidates[i].deviceId } },
+                audio: false
+              });
+              var testTrack = testStream.getVideoTracks()[0];
+              
+              // Give the Samsung driver a moment to report capabilities
+              await new Promise(function(r){ setTimeout(r, 200); });
+              var testCaps = (testTrack.getCapabilities && testTrack.getCapabilities()) || {};
+
+              if (testCaps.torch) {
+                // Found the exact main 1x lens wired to the flash! Keep this stream.
+                activeStream = testStream;
+                activeTrack = testTrack;
+                activeCaps = testCaps;
+                break;
+              } else {
+                // Not this one, close it and keep looking
+                testStream.getTracks().forEach(function(t){ t.stop(); });
+              }
+            } catch (err) {}
           }
-        } catch (err) {
-          // Fallback to standard environment constraint if enumeration fails
-        }
+        } catch (err) {}
       }
 
-      stream = await navigator.mediaDevices.getUserMedia(constraints);
-      track = stream.getVideoTracks()[0];
+      // 2. Fallback if enumeration didn't catch it
+      if (!activeStream) {
+        activeStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { exact: 'environment' } },
+          audio: false
+        });
+        activeTrack = activeStream.getVideoTracks()[0];
+        await new Promise(function(r){ setTimeout(r, 200); });
+        activeCaps = (activeTrack.getCapabilities && activeTrack.getCapabilities()) || {};
+      }
+
+      stream = activeStream;
+      track = activeTrack;
       video.srcObject = stream; 
       await video.play();
 
@@ -10370,28 +10394,11 @@ async function start(){
       setStatus('Scanning…'); 
       tick();
 
-      // Make sure the flashlight button appears since we are on the main camera
-      setTimeout(function(){
-        if (!running || !track) return;
-        torchBtn.hidden = false;
-      }, 300);
+      // Show the flashlight button only if the active lens supports it
+      torchBtn.hidden = !activeCaps.torch;
 
     } catch (e) {
-      // Fallback if exact deviceId fails
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-        track = stream.getVideoTracks()[0];
-        video.srcObject = stream; 
-        await video.play();
-        running = true; 
-        cam.classList.add('on'); 
-        toggleBtn.textContent = 'Stop camera';
-        torchBtn.hidden = false;
-        setStatus('Scanning…'); 
-        tick();
-      } catch (e2) {
-        setStatus('Live camera is blocked here. Use “Scan a photo” instead.', true);
-      }
+      setStatus('Live camera is blocked here. Use “Scan a photo” instead.', true);
     }
   }
 
