@@ -66,7 +66,7 @@ input[type=text]:focus-visible{outline:3px solid var(--accent);outline-offset:2p
 </head>
 <body>
 <main>
-  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v13.9</small></h1>
+  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v14</small></h1>
 
   <div class="cam" id="cam">
     <video id="video" playsinline muted></video>
@@ -10520,9 +10520,18 @@ function getQueue() {
 }
 function saveQueue(q) { localStorage.setItem('attQueue', JSON.stringify(q)); }
 
+let isSyncing = false; // Prevents the 5-second timer from running twice at the same time
+
 async function sendToSheet(item) {
   const res = await fetch(API_URL + '?' + new URLSearchParams(item));
-  return res.json(); // { ok, name, already } or { ok:false, error }
+  const text = await res.text(); // Read the raw response first
+  try {
+    return JSON.parse(text); // Try to parse it as JSON
+  } catch (e) {
+    // Catch server errors so we don't loop forever
+    console.error("Sheet returned invalid JSON:", text);
+    return { ok: false, error: 'Server Error' };
+  }
 }
 
 // Try to send immediately; if offline/failed, keep it in the queue
@@ -10538,41 +10547,51 @@ async function submit(item) {
 }
 
 // Send everything saved while offline and turn ☁ (Offline) into ✔
-// Send everything saved while offline and turn ☁ (Offline) into ✔
 async function flushQueue() {
-  const q = getQueue();
+  if (isSyncing) return; // If we are already syncing, don't start another one
+  
+  let q = getQueue();
   if (!q.length) return;
+  
+  isSyncing = true; // Lock the sync
 
-  const stillPending = [];
-  for (const item of q) {
-    try {
-      const res = await sendToSheet(item);
-      const val = item.code || item.name;
-      
-      // The server responded! Let's check what it said:
-      if (res && res.ok && res.already) {
-        updateItemStatus(val, '✔ (Already)', 'already');
-      } else if (res && res.ok) {
-        updateItemStatus(val, '✔', 'ok');
-      } else {
-        // The server responded, but it rejected the entry (e.g., spelling error, wrong code)
-        updateItemStatus(val, '✖ (' + (res.error || 'Failed') + ')', 'err');
+  try {
+    while (q.length > 0) {
+      const item = q[0]; // Look at the oldest item in the queue
+      try {
+        const res = await sendToSheet(item);
+        const val = item.code || item.name;
+
+        // Strict check applied here
+        if (res && res.ok && (res.already === true || res.already === 'true')) {
+          updateItemStatus(val, '✔ (Already)', 'already');
+        } else if (res && res.ok) {
+          updateItemStatus(val, '✔', 'ok');
+        } else {
+          updateItemStatus(val, '✖ (' + (res.error || 'Failed') + ')', 'err');
+        }
+
+        // We got a response from the server! Remove it from the queue safely.
+        q = getQueue(); // Reload queue in case you scanned a new code while waiting
+        q.shift();      // Remove the oldest item
+        saveQueue(q);   // Save the newly shrunk queue
+
+      } catch (e) {
+        // A true network disconnect (e.g. WiFi turned off mid-sync)
+        // Break the loop and leave it in the queue for the next interval
+        break; 
       }
-      // Because the server gave us a definitive answer, we DO NOT push it back to stillPending.
-      
-    } catch (e) {
-      // An actual network error occurred (internet dropped again during fetch)
-      // Keep it in the queue to try again on the next tick
-      stillPending.push(item);
     }
+  } finally {
+    isSyncing = false; // Always unlock when finished
   }
-  saveQueue(stillPending);
 }
 
 // Automatically retries every 5 seconds, on reconnect, and on page load
 setInterval(flushQueue, 5000);
 window.addEventListener('online', flushQueue);
 window.addEventListener('load', flushQueue);
+
 // ---- call these from your app ----
 async function onScan(code) {
   var session = document.getElementById('sessionSelect').value;
@@ -10592,7 +10611,7 @@ async function onManualName(name) {
 function showResult(text, r) {
   if (r.queued) {
     updateItemStatus(text, '☁ (Offline)', 'syncing');
-  } else if (r.ok && r.already) {
+  } else if (r.ok && (r.already === true || r.already === 'true')) {
     updateItemStatus(text, '✔ (Already)', 'already');
   } else if (r.ok) {
     updateItemStatus(text, '✔', 'ok');
