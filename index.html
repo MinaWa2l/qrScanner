@@ -10401,16 +10401,26 @@ torchBtn.onclick = async function(){
     var nextState = !torchOn;
     try {
       await track.applyConstraints({ advanced: [{ torch: nextState }] });
-      torchOn = nextState;
+      
+      // Check what the camera track actually did
+      var settings = track.getSettings ? track.getSettings() : {};
+      torchOn = !!settings.torch; // Sync with actual hardware state
+      
       torchBtn.textContent = torchOn ? 'Flashlight: on' : 'Flashlight';
+      torchBtn.classList.toggle('primary', torchOn);
     } catch (e1) {
       try {
-        // Fallback constraint syntax for some mobile browsers
         await track.applyConstraints({ torch: nextState });
-        torchOn = nextState;
+        var settings = track.getSettings ? track.getSettings() : {};
+        torchOn = !!settings.torch;
+        
         torchBtn.textContent = torchOn ? 'Flashlight: on' : 'Flashlight';
+        torchBtn.classList.toggle('primary', torchOn);
       } catch (e2) {
-        setStatus('Flashlight error: ' + (e2 && e2.message ? e2.message : 'Not supported on this lens/browser'), true);
+        torchOn = false; // Reset state on failure
+        torchBtn.textContent = 'Flashlight';
+        torchBtn.classList.remove('primary');
+        setStatus('Flashlight is not available on this lens/browser.', true);
       }
     }
   };
