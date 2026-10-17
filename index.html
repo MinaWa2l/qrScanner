@@ -75,7 +75,7 @@ input[type=text]:focus-visible{outline:3px solid var(--accent);outline-offset:2p
   <p class="status" id="loginMsg" role="status"></p>
 </div>
 <main id="app" hidden>
-  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v13.5</small></h1>
+  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v13.6</small></h1>
 
   <div class="cam" id="cam">
     <video id="video" playsinline muted></video>
@@ -10338,19 +10338,53 @@ async function start(){
       setStatus('Camera not available here. Use “Scan a photo” instead.', true); return;
     }
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
-      video.srcObject = stream; await video.play();
+      // 1. Start with standard rear camera request
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false
+      });
       track = stream.getVideoTracks()[0];
+
+      // Wait briefly for Samsung camera driver to report capabilities
+      await new Promise(function(r){ setTimeout(r, 250); });
+      var caps = (track && track.getCapabilities) ? track.getCapabilities() : {};
+
+      // 2. S24 Ultra Fix: If this rear lens doesn't have the torch, find the rear lens that DOES
+      if (!caps.torch && navigator.mediaDevices.enumerateDevices) {
+        var devices = await navigator.mediaDevices.enumerateDevices();
+        var backCams = devices.filter(function(d){
+          return d.kind === 'videoinput' && /back|rear|environment|0/i.test(d.label);
+        });
+        // Try rear cameras until we find the main 1x lens with torch support
+        for (var i = 0; i < backCams.length; i++) {
+          if (track && track.getSettings().deviceId === backCams[i].deviceId) continue;
+          try {
+            var testStream = await navigator.mediaDevices.getUserMedia({
+              video: { deviceId: { exact: backCams[i].deviceId } },
+              audio: false
+            });
+            var testTrack = testStream.getVideoTracks()[0];
+            await new Promise(function(r){ setTimeout(r, 200); });
+            var testCaps = (testTrack && testTrack.getCapabilities) ? testTrack.getCapabilities() : {};
+            if (testCaps.torch) {
+              // Found the main camera with the flash! Stop the old stream and use this one
+              stream.getTracks().forEach(function(t){ t.stop(); });
+              stream = testStream;
+              track = testTrack;
+              caps = testCaps;
+              break;
+            } else {
+              testStream.getTracks().forEach(function(t){ t.stop(); });
+            }
+          } catch (err) {}
+        }
+      }
+
+      video.srcObject = stream;
+      await video.play();
+      torchBtn.hidden = false;
       running = true; cam.classList.add('on'); toggleBtn.textContent = 'Stop camera';
       setStatus('Scanning…'); tick();
-
-      // Wait 350ms for the phone's camera hardware to finish reporting capabilities
-      setTimeout(function(){
-        if (!running || !track) return;
-        var caps = (track.getCapabilities && track.getCapabilities()) || {};
-        // Show if caps.torch is true, OR if ImageCapture exists, OR always show while camera is on so you can test it
-        torchBtn.hidden = false; 
-      }, 350);
     } catch (e) {
       setStatus('Live camera is blocked here (' + (e && e.name ? e.name : 'error') + '). Use “Scan a photo” instead: it opens your camera app.', true);
     }
