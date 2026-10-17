@@ -75,7 +75,7 @@ input[type=text]:focus-visible{outline:3px solid var(--accent);outline-offset:2p
   <p class="status" id="loginMsg" role="status"></p>
 </div>
 <main id="app" hidden>
-  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v13</small></h1>
+  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v13.5</small></h1>
 
   <div class="cam" id="cam">
     <video id="video" playsinline muted></video>
@@ -10333,18 +10333,24 @@ function add(text, manual){
     setTimeout(function(){ requestAnimationFrame(tick); }, 120);
   }
 
-  async function start(){
+async function start(){
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
       setStatus('Camera not available here. Use “Scan a photo” instead.', true); return;
     }
     try {
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
       video.srcObject = stream; await video.play();
-      track = stream.getVideoTracks()[0];                                              // NEW
-      var caps = (track && track.getCapabilities && track.getCapabilities()) || {};    // NEW
-      torchBtn.hidden = !caps.torch;   // button only appears if the phone supports it  // NEW
+      track = stream.getVideoTracks()[0];
       running = true; cam.classList.add('on'); toggleBtn.textContent = 'Stop camera';
       setStatus('Scanning…'); tick();
+
+      // Wait 350ms for the phone's camera hardware to finish reporting capabilities
+      setTimeout(function(){
+        if (!running || !track) return;
+        var caps = (track.getCapabilities && track.getCapabilities()) || {};
+        // Show if caps.torch is true, OR if ImageCapture exists, OR always show while camera is on so you can test it
+        torchBtn.hidden = false; 
+      }, 350);
     } catch (e) {
       setStatus('Live camera is blocked here (' + (e && e.name ? e.name : 'error') + '). Use “Scan a photo” instead: it opens your camera app.', true);
     }
