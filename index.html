@@ -10228,6 +10228,8 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
   var countEl = document.getElementById('count');
   var toggleBtn = document.getElementById('toggle');
   var stream = null, running = false, lastText = '', lastTime = 0;
+  var track = null, torchOn = false;                       // NEW
+  var torchBtn = document.getElementById('torch');         // NEW
   var detector = null;
   var canvas = document.createElement('canvas');
   var ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -10338,6 +10340,9 @@ function add(text, manual){
     try {
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
       video.srcObject = stream; await video.play();
+      track = stream.getVideoTracks()[0];                                              // NEW
+      var caps = (track && track.getCapabilities && track.getCapabilities()) || {};    // NEW
+      torchBtn.hidden = !caps.torch;   // button only appears if the phone supports it  // NEW
       running = true; cam.classList.add('on'); toggleBtn.textContent = 'Stop camera';
       setStatus('Scanning…'); tick();
     } catch (e) {
@@ -10347,9 +10352,20 @@ function add(text, manual){
   function stop(){
     running = false;
     if (stream){ stream.getTracks().forEach(function(t){ t.stop(); }); stream = null; }
+    track = null; torchOn = false; torchBtn.hidden = true; torchBtn.textContent = 'Flashlight';  // NEW
     video.srcObject = null; cam.classList.remove('on'); toggleBtn.textContent = 'Start camera'; setStatus('');
   }
   toggleBtn.onclick = function(){ running ? stop() : start(); };
+	torchBtn.onclick = async function(){
+    if (!track) return;
+    try {
+      await track.applyConstraints({ advanced: [{ torch: !torchOn }] });
+      torchOn = !torchOn;
+      torchBtn.textContent = torchOn ? 'Flashlight: on' : 'Flashlight';
+    } catch (e) {
+      setStatus('Flashlight is not available on this phone.', true);
+    }
+  };
 
   document.getElementById('pic').onchange = function(ev){
     var f = ev.target.files && ev.target.files[0]; if (!f) return;
