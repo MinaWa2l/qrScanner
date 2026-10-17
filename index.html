@@ -10429,7 +10429,7 @@ async function start(){
       var settings = track.getSettings ? track.getSettings() : {};
       torchOn = !!settings.torch; 
 
-      torchBtn.textContent = torchOn ? 'Flashlight: on' : 'Flashlight';
+      torchBtn.textContent = torchOn ? 'Flashlight' : 'Flashlight';
       torchBtn.classList.toggle('primary', torchOn);
     } catch (e) {
       torchOn = false;
