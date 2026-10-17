@@ -66,7 +66,7 @@ input[type=text]:focus-visible{outline:3px solid var(--accent);outline-offset:2p
 </head>
 <body>
 <main>
-  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v12</small></h1>
+  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v12.5</small></h1>
 
   <div class="cam" id="cam">
     <video id="video" playsinline muted></video>
@@ -82,6 +82,7 @@ input[type=text]:focus-visible{outline:3px solid var(--accent);outline-offset:2p
 </div>
   <div class="row">
     <button class="primary" id="toggle">Start camera</button>
+	  <button id="torch" hidden>Flashlight</button>
     <label class="btn" for="pic">Scan a photo</label>
     <input type="file" id="pic" accept="image/*" capture="environment">
   </div>
@@ -10320,24 +10321,83 @@ function add(text, manual){
     setTimeout(function(){ requestAnimationFrame(tick); }, 120);
   }
 
+var track = null, torchOn = false;
+  var torchBtn = document.getElementById('torch');
+
   async function start(){
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
       setStatus('Camera not available here. Use “Scan a photo” instead.', true); return;
     }
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
-      video.srcObject = stream; await video.play();
-      running = true; cam.classList.add('on'); toggleBtn.textContent = 'Stop camera';
-      setStatus('Scanning…'); tick();
+      // 1. Request the rear camera
+      stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: { ideal: 'environment' } }, 
+        audio: false 
+      });
+      track = stream.getVideoTracks()[0];
+      video.srcObject = stream; 
+      await video.play();
+
+      running = true; 
+      cam.classList.add('on'); 
+      toggleBtn.textContent = 'Stop camera';
+      setStatus('Scanning…'); 
+      tick();
+
+      // 2. Check if the camera hardware supports a flashlight (torch)
+      setTimeout(function(){
+        if (!running || !track) return;
+        var caps = (track.getCapabilities && track.getCapabilities()) || {};
+        // Reveal the button if torch is supported, or force it visible on mobile to test
+        if (caps.torch) {
+          torchBtn.hidden = false;
+        } else {
+          // Fallback check for devices that hide capabilities initially
+          torchBtn.hidden = false; 
+        }
+      }, 300);
+
     } catch (e) {
-      setStatus('Live camera is blocked here (' + (e && e.name ? e.name : 'error') + '). Use “Scan a photo” instead: it opens your camera app.', true);
+      setStatus('Live camera is blocked here. Use “Scan a photo” instead.', true);
     }
   }
+
   function stop(){
     running = false;
+    torchOn = false;
+    torchBtn.hidden = true;
+    torchBtn.textContent = 'Flashlight';
+    torchBtn.classList.remove('primary');
     if (stream){ stream.getTracks().forEach(function(t){ t.stop(); }); stream = null; }
-    video.srcObject = null; cam.classList.remove('on'); toggleBtn.textContent = 'Start camera'; setStatus('');
+    track = null;
+    video.srcObject = null; 
+    cam.classList.remove('on'); 
+    toggleBtn.textContent = 'Start camera'; 
+    setStatus('');
   }
+  
+  toggleBtn.onclick = function(){ running ? stop() : start(); };
+
+  // 3. Flashlight button click handler with hardware verification
+  torchBtn.onclick = async function(){
+    if (!track) return;
+    var nextState = !torchOn;
+    try {
+      await track.applyConstraints({ advanced: [{ torch: nextState }] });
+      
+      // Verify with the phone hardware if the light actually turned on
+      var settings = track.getSettings ? track.getSettings() : {};
+      torchOn = !!settings.torch; 
+
+      torchBtn.textContent = torchOn ? 'Flashlight: on' : 'Flashlight';
+      torchBtn.classList.toggle('primary', torchOn);
+    } catch (e) {
+      torchOn = false;
+      torchBtn.textContent = 'Flashlight';
+      torchBtn.classList.remove('primary');
+      setStatus('Flashlight is not supported on this active camera lens.', true);
+    }
+  };
   toggleBtn.onclick = function(){ running ? stop() : start(); };
 
   document.getElementById('pic').onchange = function(ev){
