@@ -75,7 +75,7 @@ input[type=text]:focus-visible{outline:3px solid var(--accent);outline-offset:2p
   <p class="status" id="loginMsg" role="status"></p>
 </div>
 <main id="app" hidden>
-  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v12</small></h1>
+  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v13</small></h1>
 
   <div class="cam" id="cam">
     <video id="video" playsinline muted></video>
@@ -10424,10 +10424,81 @@ function getQueue() {
 }
 function saveQueue(q) { localStorage.setItem('attQueue', JSON.stringify(q)); }
 
-async function sendToSheet(item) {
-  const res = await fetch(API_URL + '?' + new URLSearchParams(item));
-  return res.json(); // { ok, name, already } or { ok:false, error }
+var PW_KEY = 'qr-pw';
+function getPw(){ try { return localStorage.getItem(PW_KEY) || ''; } catch (e) { return ''; } }
+ 
+// Builds a web app URL that always includes the password.
+// If you have any OTHER fetch(API_URL + ...) calls, use apiUrl({...}) there too.
+function apiUrl(params){
+  return API_URL + '?' + new URLSearchParams(Object.assign({}, params, { pw: getPw() }));
 }
+ 
+async function sendToSheet(item) {
+  if (!getPw()) throw new Error('not logged in');   // scans wait in the offline queue until login
+  const res = await fetch(apiUrl(item));
+  const data = await res.json(); // { ok, name, already } or { ok:false, error }
+  if (data && data.auth === false) {                 // password was changed on the server
+    try { localStorage.removeItem(PW_KEY); } catch (e) {}
+    showLogin('Password changed. Please log in again.');
+  }
+  return data;
+}
+ 
+// ---------- login screen ----------
+function loginMsg(text, isErr){
+  var el = document.getElementById('loginMsg');
+  el.textContent = text || '';
+  el.className = 'status' + (isErr ? ' err' : '');
+}
+function showApp(){
+  document.getElementById('login').hidden = true;
+  document.getElementById('app').hidden = false;
+}
+function showLogin(text){
+  document.getElementById('app').hidden = true;
+  document.getElementById('login').hidden = false;
+  loginMsg(text || '', !!text);
+}
+async function checkPassword(pw){
+  const res = await fetch(API_URL + '?' + new URLSearchParams({ action: 'login', pw: pw }));
+  const data = await res.json();
+  return !!(data && data.ok === true);
+}
+async function doLogin(){
+  var pw = document.getElementById('pw').value;
+  if (!pw){ loginMsg('Type the password.', true); return; }
+  loginMsg('Checking…');
+  try {
+    if (await checkPassword(pw)) {
+      try { localStorage.setItem(PW_KEY, pw); } catch (e) {}
+      document.getElementById('pw').value = '';
+      showApp();
+      flushQueue();
+    } else {
+      loginMsg('Wrong password.', true);
+    }
+  } catch (e) {
+    loginMsg('No connection. Try again.', true);
+  }
+}
+document.getElementById('loginBtn').onclick = doLogin;
+document.getElementById('pw').addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); doLogin(); } });
+document.getElementById('logout').onclick = function(){
+  try { localStorage.removeItem(PW_KEY); } catch (e) {}
+  location.reload();
+};
+ 
+// Runs when the page opens: saved password -> straight in; otherwise show the login.
+(async function initLogin(){
+  var saved = getPw();
+  if (!saved){ showLogin(''); return; }
+  try {
+    if (await checkPassword(saved)) showApp();
+    else { try { localStorage.removeItem(PW_KEY); } catch (e) {} showLogin('Please log in again.'); }
+  } catch (e) {
+    showApp(); // offline with a saved password: let them in, scans are queued
+  }
+})();
 
 // Try to send immediately; if offline/failed, keep it in the queue
 async function submit(item) {
