@@ -66,7 +66,7 @@ input[type=text]:focus-visible{outline:3px solid var(--accent);outline-offset:2p
 </head>
 <body>
 <main>
-  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v12.5</small></h1>
+  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v13</small></h1>
 
   <div class="cam" id="cam">
     <video id="video" playsinline muted></video>
@@ -10324,16 +10324,42 @@ function add(text, manual){
 var track = null, torchOn = false;
   var torchBtn = document.getElementById('torch');
 
-  async function start(){
+async function start(){
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
       setStatus('Camera not available here. Use “Scan a photo” instead.', true); return;
     }
     try {
-      // 1. Request the rear camera
-      stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: { ideal: 'environment' } }, 
-        audio: false 
-      });
+      var constraints = { video: { facingMode: { ideal: 'environment' } }, audio: false };
+
+      // Try to find the exact primary rear camera on multi-lens phones like the S24 Ultra
+      if (navigator.mediaDevices.enumerateDevices) {
+        try {
+          var devices = await navigator.mediaDevices.enumerateDevices();
+          var videoDevices = devices.filter(function(d){ return d.kind === 'videoinput'; });
+          
+          // Filter for back/rear cameras
+          var backCameras = videoDevices.filter(function(d){
+            return /back|rear|environment|0/i.test(d.label);
+          });
+
+          if (backCameras.length > 0) {
+            // Usually, the primary main camera is the first back camera or has 'back' / '0' in its label.
+            // We request it by deviceId to bypass the ultrawide lens default.
+            constraints = {
+              video: {
+                deviceId: { exact: backCameras[0].deviceId },
+                width: { ideal: 1920 },
+                height: { ideal: 1080 }
+              },
+              audio: false
+            };
+          }
+        } catch (err) {
+          // Fallback to standard environment constraint if enumeration fails
+        }
+      }
+
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
       track = stream.getVideoTracks()[0];
       video.srcObject = stream; 
       await video.play();
@@ -10344,21 +10370,28 @@ var track = null, torchOn = false;
       setStatus('Scanning…'); 
       tick();
 
-      // 2. Check if the camera hardware supports a flashlight (torch)
+      // Make sure the flashlight button appears since we are on the main camera
       setTimeout(function(){
         if (!running || !track) return;
-        var caps = (track.getCapabilities && track.getCapabilities()) || {};
-        // Reveal the button if torch is supported, or force it visible on mobile to test
-        if (caps.torch) {
-          torchBtn.hidden = false;
-        } else {
-          // Fallback check for devices that hide capabilities initially
-          torchBtn.hidden = false; 
-        }
+        torchBtn.hidden = false;
       }, 300);
 
     } catch (e) {
-      setStatus('Live camera is blocked here. Use “Scan a photo” instead.', true);
+      // Fallback if exact deviceId fails
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+        track = stream.getVideoTracks()[0];
+        video.srcObject = stream; 
+        await video.play();
+        running = true; 
+        cam.classList.add('on'); 
+        toggleBtn.textContent = 'Stop camera';
+        torchBtn.hidden = false;
+        setStatus('Scanning…'); 
+        tick();
+      } catch (e2) {
+        setStatus('Live camera is blocked here. Use “Scan a photo” instead.', true);
+      }
     }
   }
 
