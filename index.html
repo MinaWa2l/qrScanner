@@ -14,6 +14,11 @@
   font-weight: 700;
   font-size: 1rem;
 }
+	.cam.error-flash { animation: flashRed 0.6s ease-out; }
+@keyframes flashRed {
+  0% { box-shadow: inset 0 0 0 15px var(--danger); }
+  100% { box-shadow: inset 0 0 0 0px transparent; }
+}
 .sync-status.ok { color: var(--accent); }
 .sync-status.already { color: #f59e0b; }
 .sync-status.err { color: var(--danger); }
@@ -66,7 +71,7 @@ input[type=text]:focus-visible{outline:3px solid var(--accent);outline-offset:2p
 </head>
 <body>
 <main>
-  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v13.6</small></h1>
+  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v13.7</small></h1>
 
   <div class="cam" id="cam">
     <video id="video" playsinline muted></video>
@@ -10560,6 +10565,7 @@ async function onManualName(name) {
 }
 
 // Replaces alert with a checkmark / status icon in the UI list
+// Replaces alert with a checkmark / status icon in the UI list
 function showResult(text, r) {
   if (r.queued) {
     updateItemStatus(text, '☁ (Offline)', 'syncing');
@@ -10568,10 +10574,23 @@ function showResult(text, r) {
   } else if (r.ok) {
     updateItemStatus(text, '✔', 'ok');
   } else {
-    updateItemStatus(text, '✖ (' + (r.error || 'Failed') + ')', 'err');
+    // 1. Flash the camera box red
+    var camBox = document.getElementById('cam');
+    if (camBox) {
+      camBox.classList.remove('error-flash'); 
+      void camBox.offsetWidth; // trigger reflow to restart animation
+      camBox.classList.add('error-flash');
+    }
+
+    // 2. Remove it from the list visually
+    if (typeof window.removeScannedItem === 'function') {
+      window.removeScannedItem(text);
+    }
+
+    // 3. Show the warning
+    alert("DECLINED ❌\n\n" + (r.error || "Name/Code not found"));
   }
 }
-
 // Helper to find the list item and attach/update the badge
 function updateItemStatus(text, badgeText, statusClass) {
   if (typeof window.setItemStatus === 'function') {
