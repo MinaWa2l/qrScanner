@@ -10396,14 +10396,22 @@ async function start(){
     video.srcObject = null; cam.classList.remove('on'); toggleBtn.textContent = 'Start camera'; setStatus('');
   }
   toggleBtn.onclick = function(){ running ? stop() : start(); };
-	torchBtn.onclick = async function(){
+torchBtn.onclick = async function(){
     if (!track) return;
+    var nextState = !torchOn;
     try {
-      await track.applyConstraints({ advanced: [{ torch: !torchOn }] });
-      torchOn = !torchOn;
+      await track.applyConstraints({ advanced: [{ torch: nextState }] });
+      torchOn = nextState;
       torchBtn.textContent = torchOn ? 'Flashlight: on' : 'Flashlight';
-    } catch (e) {
-      setStatus('Flashlight is not available on this phone.', true);
+    } catch (e1) {
+      try {
+        // Fallback constraint syntax for some mobile browsers
+        await track.applyConstraints({ torch: nextState });
+        torchOn = nextState;
+        torchBtn.textContent = torchOn ? 'Flashlight: on' : 'Flashlight';
+      } catch (e2) {
+        setStatus('Flashlight error: ' + (e2 && e2.message ? e2.message : 'Not supported on this lens/browser'), true);
+      }
     }
   };
 
