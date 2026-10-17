@@ -22,7 +22,6 @@
   --bg:#f4f6fa; --surface:#ffffff; --ink:#0a192f; --muted:#5c6b7e; --line:#d6deea; --accent:#dfa437; --accent-ink:#072b56; --danger:#b3261e;
   color-scheme: light;
   box-sizing:border-box;
-  [hidden]{display:none !important}
   padding-top:env(safe-area-inset-top,0px);
   padding-bottom:env(safe-area-inset-bottom,0px);
 }
@@ -66,16 +65,8 @@ input[type=text]:focus-visible{outline:3px solid var(--accent);outline-offset:2p
 </style>
 </head>
 <body>
-<div id="login" style="max-width:560px;margin:0 auto;padding:16px">
-  <h1>QR list scanner</h1>
-  <div class="row">
-    <input type="password" id="pw" placeholder="Password" autocomplete="current-password" style="font:inherit;flex:1;min-width:0;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:10px 12px;border-radius:10px;min-height:44px">
-    <button class="primary" id="loginBtn">Log in</button>
-  </div>
-  <p class="status" id="loginMsg" role="status"></p>
-</div>
-<main id="app" hidden>
-  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v13.6</small></h1>
+<main>
+  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v12</small></h1>
 
   <div class="cam" id="cam">
     <video id="video" playsinline muted></video>
@@ -91,7 +82,6 @@ input[type=text]:focus-visible{outline:3px solid var(--accent);outline-offset:2p
 </div>
   <div class="row">
     <button class="primary" id="toggle">Start camera</button>
-	<button id="torch" hidden>Flashlight</button>
     <label class="btn" for="pic">Scan a photo</label>
     <input type="file" id="pic" accept="image/*" capture="environment">
   </div>
@@ -108,7 +98,6 @@ input[type=text]:focus-visible{outline:3px solid var(--accent);outline-offset:2p
   <div class="row">
     <button id="copyAll">Copy all</button>
     <button id="clear">Clear list</button>
-	<button id="logout">Log out</button>
   </div>
   <ul id="list"></ul>
 </main>
@@ -10228,8 +10217,6 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
   var countEl = document.getElementById('count');
   var toggleBtn = document.getElementById('toggle');
   var stream = null, running = false, lastText = '', lastTime = 0;
-  var track = null, torchOn = false;                       // NEW
-  var torchBtn = document.getElementById('torch');         // NEW
   var detector = null;
   var canvas = document.createElement('canvas');
   var ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -10333,56 +10320,13 @@ function add(text, manual){
     setTimeout(function(){ requestAnimationFrame(tick); }, 120);
   }
 
-async function start(){
+  async function start(){
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
       setStatus('Camera not available here. Use “Scan a photo” instead.', true); return;
     }
     try {
-      // 1. Start with standard rear camera request
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' } },
-        audio: false
-      });
-      track = stream.getVideoTracks()[0];
-
-      // Wait briefly for Samsung camera driver to report capabilities
-      await new Promise(function(r){ setTimeout(r, 250); });
-      var caps = (track && track.getCapabilities) ? track.getCapabilities() : {};
-
-      // 2. S24 Ultra Fix: If this rear lens doesn't have the torch, find the rear lens that DOES
-      if (!caps.torch && navigator.mediaDevices.enumerateDevices) {
-        var devices = await navigator.mediaDevices.enumerateDevices();
-        var backCams = devices.filter(function(d){
-          return d.kind === 'videoinput' && /back|rear|environment|0/i.test(d.label);
-        });
-        // Try rear cameras until we find the main 1x lens with torch support
-        for (var i = 0; i < backCams.length; i++) {
-          if (track && track.getSettings().deviceId === backCams[i].deviceId) continue;
-          try {
-            var testStream = await navigator.mediaDevices.getUserMedia({
-              video: { deviceId: { exact: backCams[i].deviceId } },
-              audio: false
-            });
-            var testTrack = testStream.getVideoTracks()[0];
-            await new Promise(function(r){ setTimeout(r, 200); });
-            var testCaps = (testTrack && testTrack.getCapabilities) ? testTrack.getCapabilities() : {};
-            if (testCaps.torch) {
-              // Found the main camera with the flash! Stop the old stream and use this one
-              stream.getTracks().forEach(function(t){ t.stop(); });
-              stream = testStream;
-              track = testTrack;
-              caps = testCaps;
-              break;
-            } else {
-              testStream.getTracks().forEach(function(t){ t.stop(); });
-            }
-          } catch (err) {}
-        }
-      }
-
-      video.srcObject = stream;
-      await video.play();
-      torchBtn.hidden = false;
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+      video.srcObject = stream; await video.play();
       running = true; cam.classList.add('on'); toggleBtn.textContent = 'Stop camera';
       setStatus('Scanning…'); tick();
     } catch (e) {
@@ -10392,38 +10336,9 @@ async function start(){
   function stop(){
     running = false;
     if (stream){ stream.getTracks().forEach(function(t){ t.stop(); }); stream = null; }
-    track = null; torchOn = false; torchBtn.hidden = true; torchBtn.textContent = 'Flashlight';  // NEW
     video.srcObject = null; cam.classList.remove('on'); toggleBtn.textContent = 'Start camera'; setStatus('');
   }
   toggleBtn.onclick = function(){ running ? stop() : start(); };
-torchBtn.onclick = async function(){
-    if (!track) return;
-    var nextState = !torchOn;
-    try {
-      await track.applyConstraints({ advanced: [{ torch: nextState }] });
-      
-      // Check what the camera track actually did
-      var settings = track.getSettings ? track.getSettings() : {};
-      torchOn = !!settings.torch; // Sync with actual hardware state
-      
-      torchBtn.textContent = torchOn ? 'Flashlight: on' : 'Flashlight';
-      torchBtn.classList.toggle('primary', torchOn);
-    } catch (e1) {
-      try {
-        await track.applyConstraints({ torch: nextState });
-        var settings = track.getSettings ? track.getSettings() : {};
-        torchOn = !!settings.torch;
-        
-        torchBtn.textContent = torchOn ? 'Flashlight: on' : 'Flashlight';
-        torchBtn.classList.toggle('primary', torchOn);
-      } catch (e2) {
-        torchOn = false; // Reset state on failure
-        torchBtn.textContent = 'Flashlight';
-        torchBtn.classList.remove('primary');
-        setStatus('Flashlight is not available on this lens/browser.', true);
-      }
-    }
-  };
 
   document.getElementById('pic').onchange = function(ev){
     var f = ev.target.files && ev.target.files[0]; if (!f) return;
@@ -10482,81 +10397,10 @@ function getQueue() {
 }
 function saveQueue(q) { localStorage.setItem('attQueue', JSON.stringify(q)); }
 
-var PW_KEY = 'qr-pw';
-function getPw(){ try { return localStorage.getItem(PW_KEY) || ''; } catch (e) { return ''; } }
- 
-// Builds a web app URL that always includes the password.
-// If you have any OTHER fetch(API_URL + ...) calls, use apiUrl({...}) there too.
-function apiUrl(params){
-  return API_URL + '?' + new URLSearchParams(Object.assign({}, params, { pw: getPw() }));
-}
- 
 async function sendToSheet(item) {
-  if (!getPw()) throw new Error('not logged in');   // scans wait in the offline queue until login
-  const res = await fetch(apiUrl(item));
-  const data = await res.json(); // { ok, name, already } or { ok:false, error }
-  if (data && data.auth === false) {                 // password was changed on the server
-    try { localStorage.removeItem(PW_KEY); } catch (e) {}
-    showLogin('Password changed. Please log in again.');
-  }
-  return data;
+  const res = await fetch(API_URL + '?' + new URLSearchParams(item));
+  return res.json(); // { ok, name, already } or { ok:false, error }
 }
- 
-// ---------- login screen ----------
-function loginMsg(text, isErr){
-  var el = document.getElementById('loginMsg');
-  el.textContent = text || '';
-  el.className = 'status' + (isErr ? ' err' : '');
-}
-function showApp(){
-  document.getElementById('login').hidden = true;
-  document.getElementById('app').hidden = false;
-}
-function showLogin(text){
-  document.getElementById('app').hidden = true;
-  document.getElementById('login').hidden = false;
-  loginMsg(text || '', !!text);
-}
-async function checkPassword(pw){
-  const res = await fetch(API_URL + '?' + new URLSearchParams({ action: 'login', pw: pw }));
-  const data = await res.json();
-  return !!(data && data.ok === true);
-}
-async function doLogin(){
-  var pw = document.getElementById('pw').value;
-  if (!pw){ loginMsg('Type the password.', true); return; }
-  loginMsg('Checking…');
-  try {
-    if (await checkPassword(pw)) {
-      try { localStorage.setItem(PW_KEY, pw); } catch (e) {}
-      document.getElementById('pw').value = '';
-      showApp();
-      flushQueue();
-    } else {
-      loginMsg('Wrong password.', true);
-    }
-  } catch (e) {
-    loginMsg('No connection. Try again.', true);
-  }
-}
-document.getElementById('loginBtn').onclick = doLogin;
-document.getElementById('pw').addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); doLogin(); } });
-document.getElementById('logout').onclick = function(){
-  try { localStorage.removeItem(PW_KEY); } catch (e) {}
-  location.reload();
-};
- 
-// Runs when the page opens: saved password -> straight in; otherwise show the login.
-(async function initLogin(){
-  var saved = getPw();
-  if (!saved){ showLogin(''); return; }
-  try {
-    if (await checkPassword(saved)) showApp();
-    else { try { localStorage.removeItem(PW_KEY); } catch (e) {} showLogin('Please log in again.'); }
-  } catch (e) {
-    showApp(); // offline with a saved password: let them in, scans are queued
-  }
-})();
 
 // Try to send immediately; if offline/failed, keep it in the queue
 async function submit(item) {
