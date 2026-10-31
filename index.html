@@ -69,29 +69,33 @@
       100% { transform: scale(1); opacity: 1; }
     }
 
-    /* Clear session indicator overlay */
+    /* Centered, highly visible session indicator */
     .session-overlay {
       position: absolute;
-      top: 12px;
-      left: 12px;
-      background: rgba(0, 0, 0, 0.7);
-      color: #fff;
-      padding: 6px 14px;
-      border-radius: 8px;
-      font-weight: bold;
-      font-size: 1.25rem;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(7, 43, 86, 0.85);
+      backdrop-filter: blur(4px);
+      color: #dfa437;
+      padding: 12px 28px;
+      border-radius: 12px;
+      font-weight: 900;
+      font-size: 2.2rem;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+      text-shadow: 0 2px 4px rgba(0,0,0,0.6);
       z-index: 5;
       pointer-events: none;
       display: none;
     }
     .cam.on .session-overlay {
-      display: block; /* Only show when camera is active */
+      display: block; 
     }
 
     .row {display:flex;gap:8px;margin:12px 0;flex-wrap:wrap;}
-    button,label.btn {font:inherit;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:10px 14px;border-radius:10px;cursor:pointer;min-height:44px;}
+    button {font:inherit;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:10px 14px;border-radius:10px;cursor:pointer;min-height:44px;}
     button.primary {background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600;flex:1;}
-    button:focus-visible,label.btn:focus-visible,a:focus-visible {outline:3px solid var(--accent);outline-offset:2px;}
+    button:focus-visible,a:focus-visible {outline:3px solid var(--accent);outline-offset:2px;}
     .status {font-size:.9rem;color:var(--muted);min-height:1.3em;margin:0 0 8px;}
     .status.err {color:var(--danger);}
     .head {display:flex;align-items:baseline;justify-content:space-between;margin-top:20px;}
@@ -104,14 +108,36 @@
     li a {color:var(--accent);}
     li button {min-height:36px;padding:6px 10px;font-size:.85rem;}
     .empty {color:var(--muted);padding:14px 0;}
-    input[type=file] {display:none;}
     input[type=text] {font:inherit;flex:1;min-width:0;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:10px 12px;border-radius:10px;min-height:44px;}
     input[type=text]:focus-visible {outline:3px solid var(--accent);outline-offset:2px;}
+
+    /* Forgot Card Toggle Styles */
+    .forgot-btn {
+      display: flex; 
+      align-items: center; 
+      justify-content: center;
+      font-size: 0.8rem; 
+      font-weight: 700; 
+      cursor: pointer;
+      background: #0d3b6f; /* Blue */
+      color: #ffffff;
+      border: 2px solid #0d3b6f; 
+      border-radius: 10px; 
+      padding: 0 10px;
+      transition: all 0.2s ease-in-out;
+      white-space: nowrap;
+      user-select: none;
+    }
+    input#forgotCard:checked + .forgot-btn {
+      background: #ffc107; /* Yellow */
+      color: #000000;
+      border-color: #ffc107;
+    }
   </style>
 </head>
 <body>
 <main>
-  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v15</small></h1>
+  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v17</small></h1>
 
   <div class="cam" id="cam">
     <div class="session-overlay" id="sessionOverlay"></div>
@@ -131,16 +157,15 @@
     <button class="primary" id="toggle">Start camera</button>
     <button id="flip" hidden>Flip</button>
     <button id="torch" hidden>Flashlight</button>
-    <label class="btn" for="pic">Scan a photo</label>
-    <input type="file" id="pic" accept="image/*" capture="environment">
   </div>
   <p class="status" id="status" role="status"></p>
   
   <div class="row" style="align-items:stretch;">
-    <input type="text" id="manual" dir="auto" placeholder="Type a name (no QR)" autocomplete="off" enterkeyhint="done" aria-label="Type a name">
-    <label style="display:flex; align-items:center; gap:6px; font-size:0.9rem; cursor:pointer; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:0 10px;">
-       <input type="checkbox" id="forgotCard" style="transform:scale(1.2);"> نسي الكارت؟
-    </label>
+    <input type="text" id="manual" dir="auto" placeholder="Type a name" autocomplete="off" enterkeyhint="done" aria-label="Type a name">
+    
+    <input type="checkbox" id="forgotCard" hidden>
+    <label for="forgotCard" class="forgot-btn">نسي الكارت؟</label>
+
     <button id="addManual">Add</button>
   </div>
 
@@ -250,15 +275,25 @@
 
     var exists = items.some(function(it){ return it.text === text; });
     if (exists){
-      if (manual || text !== lastText) {
+      // Only pop the error if it's a new code, a manual entry, or it's been 1.5 seconds since the last error
+      if (manual || text !== lastText || (now - lastTime > 1500)) {
         setStatus('Already in the list: ' + (text.length > 60 ? text.slice(0,60) + '\u2026' : text), true);
+        
+        // Force the CSS animation to reset so it pops again
+        cam.classList.remove('flash-err');
+        void cam.offsetWidth; // trigger reflow
         cam.classList.add('flash-err');
+        
         setTimeout(function(){ cam.classList.remove('flash-err'); }, 400);
         playScanBeep(true);
         if (navigator.vibrate) { try { navigator.vibrate([100, 50, 100]); } catch (e) {} }
+        
+        lastTime = now; // Update the time so it waits another 1.5s before flashing again
       }
-      lastText = text; lastTime = now; return;
+      lastText = text; // Keep tracking the text
+      return;
     }
+    
     lastText = text; lastTime = now;
     var entry = { text: text, t: now }; if (manual) entry.m = 1;
     items.unshift(entry);
@@ -316,7 +351,7 @@
 
   async function start(){
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-      setStatus('Camera not available here. Use “Scan a photo” instead.', true); return;
+      setStatus('Camera not available.', true); return;
     }
     try {
       let activeStream = null;
@@ -391,7 +426,7 @@
       torchBtn.hidden = !activeCaps.torch;
 
     } catch (e) {
-      setStatus('Live camera is blocked here. Use “Scan a photo” instead.', true);
+      setStatus('Live camera is blocked here.', true);
     }
   }
   
@@ -439,21 +474,6 @@
     }
   };
 
-  document.getElementById('pic').onchange = function(ev){
-    var f = ev.target.files && ev.target.files[0]; if (!f) return;
-    var img = new Image();
-    img.onload = function(){
-      var s = Math.min(1, 1200 / Math.max(img.width, img.height));
-      canvas.width = Math.round(img.width * s); canvas.height = Math.round(img.height * s);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      var text = decodeCanvas();
-      URL.revokeObjectURL(img.src);
-      if (text){ lastText = ''; add(text); } else setStatus('No QR code found in that photo.', true);
-    };
-    img.onerror = function(){ setStatus('Could not read that image.', true); };
-    img.src = URL.createObjectURL(f); ev.target.value = '';
-  };
-
   document.getElementById('copyAll').onclick = async function(){
     if (!items.length){ setStatus('Nothing to copy yet.', true); return; }
     var txt = items.slice().reverse().map(function(i){ return i.text; }).join('\n');
@@ -477,8 +497,6 @@
     add(manualEl.value, true);
     if (items.length > before) {
         manualEl.value = '';
-        // Optional: uncheck the box automatically after submission so you don't accidentally leave it on
-        // document.getElementById('forgotCard').checked = false;
     }
     manualEl.focus();
   }
@@ -585,9 +603,10 @@ function showResult(text, r) {
     updateItemStatus(text, '☁ (Offline)', 'syncing');
   } else if (r.ok && (r.already === true || r.already === 'true')) {
     updateItemStatus(text, '✔ (Already)', 'already');
-    // Also trigger the camera red flash if the server flagged it as already submitted
     var cam = document.getElementById('cam');
     if (cam) {
+      cam.classList.remove('flash-err');
+      void cam.offsetWidth; // reflow
       cam.classList.add('flash-err');
       setTimeout(function(){ cam.classList.remove('flash-err'); }, 400);
     }
