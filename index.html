@@ -69,7 +69,7 @@
       100% { transform: scale(1); opacity: 1; }
     }
 
-    /* Middle-Top session indicator */
+    /* Middle-Top session indicator & Counter */
     .session-overlay {
       position: absolute;
       top: 16px;
@@ -78,7 +78,7 @@
       background: rgba(7, 43, 86, 0.85);
       backdrop-filter: blur(4px);
       color: #dfa437;
-      padding: 10px 24px;
+      padding: 8px 16px;
       border-radius: 12px;
       font-weight: 900;
       font-size: 1.8rem;
@@ -87,10 +87,21 @@
       z-index: 5;
       pointer-events: none;
       display: none;
+      align-items: center;
+      gap: 12px;
       white-space: nowrap;
     }
     .cam.on .session-overlay {
-      display: block; 
+      display: flex; 
+    }
+    .overlay-badge {
+      background: #dfa437;
+      color: #072b56;
+      border-radius: 8px;
+      padding: 2px 10px;
+      font-size: 1.4rem;
+      text-shadow: none;
+      line-height: 1.2;
     }
 
     .row {display:flex;gap:8px;margin:12px 0;flex-wrap:wrap;}
@@ -138,10 +149,13 @@
 </head>
 <body>
 <main>
-  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v18</small></h1>
+  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v19</small></h1>
 
   <div class="cam" id="cam">
-    <div class="session-overlay" id="sessionOverlay"></div>
+    <div class="session-overlay" id="sessionOverlay">
+      <span id="overlaySessionText"></span>
+      <span class="overlay-badge" id="overlayCount">0</span>
+    </div>
     <video id="video" playsinline muted></video>
     <div class="frame"></div>
     <div class="hint">Tap “Start camera”, then point it at a QR code.</div>
@@ -193,17 +207,17 @@
   var statusEl = document.getElementById('status');
   var listEl = document.getElementById('list');
   var countEl = document.getElementById('count');
+  var overlayCountEl = document.getElementById('overlayCount');
   var toggleBtn = document.getElementById('toggle');
   var stream = null, running = false, lastText = '', lastTime = 0;
   var detector = null;
   var canvas = document.createElement('canvas');
   var ctx = canvas.getContext('2d', { willReadFrequently: true });
   var sessionSelect = document.getElementById('sessionSelect');
-  var sessionOverlay = document.getElementById('sessionOverlay');
-  var codeGoneTimer;
+  var codeGoneTimer = null;
 
   function updateOverlay() {
-    sessionOverlay.textContent = sessionSelect.options[sessionSelect.selectedIndex].text;
+    document.getElementById('overlaySessionText').textContent = sessionSelect.options[sessionSelect.selectedIndex].text;
   }
   sessionSelect.addEventListener('change', updateOverlay);
   updateOverlay();
@@ -217,6 +231,7 @@
 
   function render(){
     countEl.textContent = items.length;
+    overlayCountEl.textContent = items.length;
     listEl.innerHTML = '';
     if (!items.length){
       var p = document.createElement('li');
@@ -278,16 +293,14 @@
     var exists = items.some(function(it){ return it.text === text; });
     if (exists){
       if (manual) {
-        // Just flash for typed manual errors
         setStatus('Already in the list: ' + text, true);
         cam.classList.remove('hold-err');
         cam.classList.remove('flash-err');
-        void cam.offsetWidth;
+        void cam.offsetWidth; // Reflow
         cam.classList.add('flash-err');
         setTimeout(function(){ cam.classList.remove('flash-err'); }, 400);
         playScanBeep(true);
       } else {
-        // Hold the red screen while the duplicate QR is visible
         cam.classList.add('hold-err');
         if (text !== lastText) {
           setStatus('Already in the list: ' + (text.length > 60 ? text.slice(0,60) + '\u2026' : text), true);
@@ -306,7 +319,7 @@
     playScanBeep(false);
     if (navigator.vibrate) { try { navigator.vibrate(60); } catch (e) {} }
     
-    cam.classList.remove('hold-err'); // Just in case it was stuck
+    cam.classList.remove('hold-err');
     cam.classList.add('flash'); 
     setTimeout(function(){ cam.classList.remove('flash'); }, 400); 
     
@@ -347,13 +360,12 @@
         if (text) {
           clearTimeout(codeGoneTimer);
           add(text);
-        } else {
-          // If 300ms pass without detecting a code, assume it's gone and clear the error screen
-          clearTimeout(codeGoneTimer);
+          
+          // Debounce: if 600ms pass without ANY text detected, drop the error screen & reset memory
           codeGoneTimer = setTimeout(function(){
             cam.classList.remove('hold-err');
-            lastText = ''; // Resets so it beeps again if the same card is brought back
-          }, 300);
+            lastText = ''; 
+          }, 600);
         }
 
       } catch (e) {}
