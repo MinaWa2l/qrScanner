@@ -149,7 +149,7 @@
 </head>
 <body>
 <main>
-  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v19</small></h1>
+  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v20</small></h1>
 
   <div class="cam" id="cam">
     <div class="session-overlay" id="sessionOverlay">
@@ -209,12 +209,17 @@
   var countEl = document.getElementById('count');
   var overlayCountEl = document.getElementById('overlayCount');
   var toggleBtn = document.getElementById('toggle');
-  var stream = null, running = false, lastText = '', lastTime = 0;
-  var detector = null;
+  
+  var stream = null, running = false, detector = null;
   var canvas = document.createElement('canvas');
   var ctx = canvas.getContext('2d', { willReadFrequently: true });
   var sessionSelect = document.getElementById('sessionSelect');
+  
+  // Timers and Memory
   var codeGoneTimer = null;
+  var lastAddedText = '';
+  var lastAddedTime = 0;
+  var lastErrorText = ''; 
 
   function updateOverlay() {
     document.getElementById('overlaySessionText').textContent = sessionSelect.options[sessionSelect.selectedIndex].text;
@@ -301,18 +306,31 @@
         setTimeout(function(){ cam.classList.remove('flash-err'); }, 400);
         playScanBeep(true);
       } else {
+        
+        // ---- THE 5-SECOND SHIELD ----
+        // If this is the exact same card we JUST added, give the user 5 seconds to move their hand away
+        if (text === lastAddedText && (now - lastAddedTime < 5000)) {
+           lastErrorText = text; // Keep tracking so we don't beep immediately when the 5s ends
+           return; 
+        }
+
+        // If we made it here, the shield is expired (or it's a completely different duplicate card)
         cam.classList.add('hold-err');
-        if (text !== lastText) {
+        if (text !== lastErrorText) {
           setStatus('Already in the list: ' + (text.length > 60 ? text.slice(0,60) + '\u2026' : text), true);
           playScanBeep(true);
           if (navigator.vibrate) { try { navigator.vibrate([100, 50, 100]); } catch (e) {} }
         }
       }
-      lastText = text;
+      lastErrorText = text;
       return;
     }
     
-    lastText = text; 
+    // ---- SUCCESSFUL NEW SCAN ----
+    lastAddedText = text; 
+    lastAddedTime = now;
+    lastErrorText = text; // Prevent instant error beeping if they hold it past 5s
+    
     var entry = { text: text, t: now }; if (manual) entry.m = 1;
     items.unshift(entry);
     save(); render();
@@ -364,7 +382,7 @@
           // Debounce: if 600ms pass without ANY text detected, drop the error screen & reset memory
           codeGoneTimer = setTimeout(function(){
             cam.classList.remove('hold-err');
-            lastText = ''; 
+            lastErrorText = ''; 
           }, 600);
         }
 
