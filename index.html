@@ -634,7 +634,8 @@ window.addEventListener('load', flushQueue);
 async function onScan(code, isForgot) {
   var session = document.getElementById('sessionSelect').value;
   updateItemStatus(code, '⌛', 'syncing');
-  const result = await submit({ code: code, session: session, forgotCard: isForgot });
+  // Force forgotCard to false for QR scans
+  const result = await submit({ code: code, session: session, forgotCard: false });
   showResult(code, result);
 }
 
