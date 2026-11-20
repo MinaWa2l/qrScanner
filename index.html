@@ -5,194 +5,337 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>QR List Scanner</title>
   <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#dfa437">
+  <meta name="theme-color" content="#0f2d59">
   <link rel="icon" href="icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@600;700;800;900&display=swap" rel="stylesheet">
   <style>
-    .sync-status { margin-left: 8px; font-weight: 700; font-size: 1rem; }
-    .sync-status.ok { color: var(--accent); }
-    .sync-status.already { color: #f59e0b; }
-    .sync-status.err { color: var(--danger); }
-    .sync-status.syncing { color: var(--muted); font-size: 0.8rem; }
     :root {
-      --bg:#f4f6fa; --surface:#ffffff; --ink:#0a192f; --muted:#5c6b7e; --line:#d6deea; --accent:#dfa437; --accent-ink:#072b56; --danger:#b3261e;
+      --bg: #eef2f7;
+      --surface: rgba(255, 255, 255, 0.72);
+      --surface-solid: #ffffff;
+      --input-bg: rgba(255, 255, 255, 0.65);
+      --ink: #0f172a;
+      --muted: #5c6b7e;
+      --line: rgba(148, 163, 184, 0.28);
+      --accent: #dfa437;
+      --accent-2: #f59e0b;
+      --accent-ink: #072b56;
+      --danger: #ef4444;
+      --glass-inset: rgba(255, 255, 255, 0.75);
+      --shadow-soft: 0 10px 30px -5px rgba(15, 45, 89, 0.10), 0 4px 12px -2px rgba(15, 45, 89, 0.05);
       color-scheme: light;
     }
     @media (prefers-color-scheme: dark){
       :root:not([data-theme="light"]){
-        --bg:#19233B; --surface:#0d3b6f; --ink:#f4f7fb; --muted:#94a8c4; --line:#1c497e; --accent:#dfa437; --accent-ink:#072b56; --danger:#ff8a80;
+        --bg: #020b1c;
+        --surface: rgba(12, 29, 58, 0.65);
+        --surface-solid: #0a1d3b;
+        --input-bg: rgba(2, 15, 36, 0.55);
+        --ink: #f8fafc;
+        --muted: #94a8c4;
+        --line: rgba(148, 163, 184, 0.18);
+        --accent: #dfa437;
+        --accent-2: #f59e0b;
+        --accent-ink: #072b56;
+        --danger: #ff6b6b;
+        --glass-inset: rgba(255, 255, 255, 0.12);
+        --shadow-soft: 0 12px 36px -6px rgba(0, 0, 0, 0.48), 0 4px 12px -2px rgba(0, 0, 0, 0.32);
         color-scheme: dark;
       }
     }
-    * {box-sizing:border-box;}
-    html {scroll-padding-top:env(safe-area-inset-top,0px);}
-    body {margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.4;}
-    main {max-width:560px;margin:0 auto;padding:16px;}
-    h1 {font-size:1.25rem;margin:4px 0 12px;}
-    
-    .cam {position:relative;background:#000;border-radius:14px;overflow:hidden;aspect-ratio:1/1;border:1px solid var(--line);}
-    .cam video {width:100%;height:100%;object-fit:cover;display:block;}
-    .cam .hint {position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;color:#cfd8d2;padding:24px;font-size:.95rem;}
-    .cam .frame {position:absolute;inset:18%;border:3px solid var(--accent);border-radius:12px;pointer-events:none;display:none;}
-    .cam.on .frame {display:block;}
-    .cam.on .hint {display:none;}
-    
+
+    * { box-sizing: border-box; }
+    html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: 'Cairo', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      line-height: 1.45;
+      min-height: 100vh;
+      position: relative;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Ambient Liquid Glow */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(circle at 15% 10%, rgba(223, 164, 55, 0.16) 0%, transparent 45%),
+        radial-gradient(circle at 85% 25%, rgba(59, 130, 246, 0.18) 0%, transparent 48%),
+        radial-gradient(circle at 50% 90%, rgba(16, 185, 129, 0.10) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    main { max-width: 540px; margin: 0 auto; padding: 16px 14px 40px; }
+
+    .header-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 18px;
+      margin-bottom: 14px;
+      background: var(--surface);
+      backdrop-filter: blur(22px) saturate(160%);
+      -webkit-backdrop-filter: blur(22px) saturate(160%);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      box-shadow: var(--shadow-soft), inset 0 1px 0 var(--glass-inset);
+    }
+    h1 { font-size: 1.2rem; font-weight: 900; margin: 0; display: flex; align-items: center; gap: 8px; }
+    .ver-pill {
+      font-weight: 800;
+      font-size: 0.72rem;
+      padding: 2px 9px;
+      border-radius: 99px;
+      background: rgba(223, 164, 55, 0.18);
+      color: var(--accent);
+      border: 1px solid rgba(223, 164, 55, 0.35);
+    }
+
+    .glass-card {
+      background: var(--surface);
+      backdrop-filter: blur(22px) saturate(160%);
+      -webkit-backdrop-filter: blur(22px) saturate(160%);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 14px;
+      margin-bottom: 14px;
+      box-shadow: var(--shadow-soft), inset 0 1px 0 var(--glass-inset);
+    }
+
+    .cam {
+      position: relative;
+      background: #020617;
+      border-radius: 18px;
+      overflow: hidden;
+      aspect-ratio: 1/1;
+      border: 1px solid var(--line);
+      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
+    }
+    .cam video { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .cam .hint {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      text-align: center; color: #cbd5e1; padding: 24px; font-size: .95rem; font-weight: 700;
+    }
+    .cam .frame {
+      position: absolute; inset: 18%;
+      border: 3px solid var(--accent);
+      border-radius: 16px;
+      box-shadow: 0 0 0 9999px rgba(2, 6, 23, 0.25), inset 0 0 16px rgba(223, 164, 55, 0.35);
+      pointer-events: none;
+      display: none;
+    }
+    .cam.on .frame { display: block; }
+    .cam.on .hint { display: none; }
+
     /* Giant popping checkmark for success */
     .cam.flash::after {
       content: '✔';
-      position: absolute;
-      inset: 0;
-      background: rgba(46, 204, 113, 0.85);
-      color: white;
-      font-size: 8rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 10;
-      animation: pop 0.2s ease-out;
+      position: absolute; inset: 0;
+      background: rgba(16, 185, 129, 0.85);
+      backdrop-filter: blur(4px);
+      color: white; font-size: 8rem;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 10; animation: pop 0.2s ease-out;
     }
-    /* Giant red X for already scanned (Brief Flash & Hold) */
+    /* Giant red X for already scanned */
     .cam.flash-err::after, .cam.hold-err::after {
       content: '✖';
-      position: absolute;
-      inset: 0;
-      background: rgba(231, 76, 60, 0.85);
-      color: white;
-      font-size: 8rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 10;
-      animation: pop 0.2s ease-out;
+      position: absolute; inset: 0;
+      background: rgba(239, 68, 68, 0.85);
+      backdrop-filter: blur(4px);
+      color: white; font-size: 8rem;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 10; animation: pop 0.2s ease-out;
     }
     @keyframes pop {
       0% { transform: scale(0.5); opacity: 0; }
       100% { transform: scale(1); opacity: 1; }
     }
 
-    /* Middle-Top session indicator & Counter */
+    /* Liquid Glass Session Overlay */
     .session-overlay {
       position: absolute;
-      top: 16px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(7, 43, 86, 0.85);
-      backdrop-filter: blur(4px);
-      color: #dfa437;
-      padding: 8px 16px;
-      border-radius: 12px;
+      top: 14px; left: 50%; transform: translateX(-50%);
+      background: rgba(7, 25, 56, 0.72);
+      backdrop-filter: blur(16px) saturate(180%);
+      -webkit-backdrop-filter: blur(16px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      color: #fde047;
+      padding: 6px 14px;
+      border-radius: 99px;
       font-weight: 900;
-      font-size: 1.8rem;
-      box-shadow: 0 8px 16px rgba(0,0,0,0.5);
-      text-shadow: 0 2px 4px rgba(0,0,0,0.6);
+      font-size: 1.35rem;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.25);
       z-index: 5;
       pointer-events: none;
       display: none;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
       white-space: nowrap;
     }
-    .cam.on .session-overlay {
-      display: flex; 
-    }
+    .cam.on .session-overlay { display: flex; }
     .overlay-badge {
-      background: #dfa437;
+      background: linear-gradient(135deg, #fde047, #dfa437);
       color: #072b56;
-      border-radius: 8px;
-      padding: 2px 10px;
-      font-size: 1.4rem;
-      text-shadow: none;
-      line-height: 1.2;
+      border-radius: 99px;
+      padding: 1px 11px;
+      font-size: 1.15rem;
+      line-height: 1.3;
+      box-shadow: 0 2px 8px rgba(223, 164, 55, 0.4);
     }
 
-    .row {display:flex;gap:8px;margin:12px 0;flex-wrap:wrap;}
-    button {font:inherit;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:10px 14px;border-radius:10px;cursor:pointer;min-height:44px;}
-    button.primary {background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600;flex:1;}
-    button:focus-visible,a:focus-visible {outline:3px solid var(--accent);outline-offset:2px;}
-    .status {font-size:.9rem;color:var(--muted);min-height:1.3em;margin:0 0 8px;}
-    .status.err {color:var(--danger);}
-    .head {display:flex;align-items:baseline;justify-content:space-between;margin-top:20px;}
-    .head h2 {font-size:1.05rem;margin:0;}
-    .count {color:var(--muted);font-size:.9rem;}
-    ul {list-style:none;margin:8px 0 0;padding:0;}
-    li {background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;gap:10px;align-items:flex-start;}
-    li .txt {flex:1;min-width:0;overflow-wrap:anywhere;}
-    li .time {display:block;font-size:.78rem;color:var(--muted);margin-top:2px;}
-    li a {color:var(--accent);}
-    li button {min-height:36px;padding:6px 10px;font-size:.85rem;}
-    .empty {color:var(--muted);padding:14px 0;}
-    input[type=text] {font:inherit;flex:1;min-width:0;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:10px 12px;border-radius:10px;min-height:44px;}
-    input[type=text]:focus-visible {outline:3px solid var(--accent);outline-offset:2px;}
+    .row { display: flex; gap: 8px; margin: 12px 0 0; flex-wrap: wrap; }
 
-    /* Forgot Card Toggle Styles */
+    select, input[type=text], button {
+      font: inherit;
+      border: 1px solid var(--line);
+      background: var(--input-bg);
+      color: var(--ink);
+      padding: 10px 14px;
+      border-radius: 14px;
+      min-height: 44px;
+      transition: all 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    select { flex: 1; font-weight: 800; cursor: pointer; }
+    input[type=text] { flex: 1; min-width: 0; font-weight: 700; }
+    select:focus, input[type=text]:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(223, 164, 55, 0.22);
+      background: var(--surface-solid);
+    }
+
+    button { cursor: pointer; font-weight: 800; }
+    button:active { transform: scale(0.96); }
+    button.primary {
+      background: linear-gradient(135deg, #f5c04e 0%, #dfa437 60%, #c88a1e 100%);
+      color: var(--accent-ink);
+      border: 1px solid rgba(255, 255, 255, 0.45);
+      box-shadow: 0 6px 18px rgba(223, 164, 55, 0.32), inset 0 1px 1px rgba(255, 255, 255, 0.55);
+      flex: 1;
+    }
+
+    /* Forgot Card Toggle */
     .forgot-btn {
-      display: flex; 
-      align-items: center; 
-      justify-content: center;
-      font-size: 0.8rem; 
-      font-weight: 700; 
-      cursor: pointer;
-      background: #0d3b6f;
-      color: #ffffff;
-      border: 2px solid #0d3b6f; 
-      border-radius: 10px; 
-      padding: 0 10px;
-      transition: all 0.2s ease-in-out;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.82rem; font-weight: 800; cursor: pointer;
+      background: var(--input-bg);
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 0 12px;
+      transition: all 0.22s ease;
       white-space: nowrap;
       user-select: none;
     }
     input#forgotCard:checked + .forgot-btn {
-      background: #ffc107;
-      color: #000000;
-      border-color: #ffc107;
+      background: linear-gradient(135deg, #fde047, #f59e0b);
+      color: #072b56;
+      border-color: rgba(255, 255, 255, 0.5);
+      box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35);
     }
+
+    .status { font-size: .88rem; font-weight: 700; color: var(--muted); min-height: 1.3em; margin: 10px 2px 0; }
+    .status.err { color: var(--danger); }
+
+    .head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .head h2 { font-size: 1.05rem; font-weight: 900; margin: 0; }
+    .count {
+      font-size: .85rem; font-weight: 900;
+      padding: 2px 10px; border-radius: 99px;
+      background: rgba(223, 164, 55, 0.16); color: var(--accent);
+      border: 1px solid rgba(223, 164, 55, 0.3);
+    }
+
+    ul { list-style: none; margin: 12px 0 0; padding: 0; }
+    li {
+      background: var(--input-bg);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      display: flex; gap: 10px; align-items: center;
+      transition: transform 0.2s ease;
+    }
+    li .txt { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 700; }
+    li .time { display: block; font-size: .75rem; font-weight: 600; color: var(--muted); margin-top: 2px; }
+    li a { color: var(--accent); }
+    li button {
+      min-height: 34px; padding: 5px 11px; font-size: .8rem;
+      border-radius: 10px;
+      background: rgba(239, 68, 68, 0.12);
+      color: var(--danger);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    .empty { color: var(--muted); padding: 14px 0; text-align: center; font-weight: 700; justify-content: center; }
+
+    .sync-status { margin-left: 6px; font-weight: 800; font-size: 0.95rem; }
+    .sync-status.ok { color: #10b981; }
+    .sync-status.already { color: #f59e0b; }
+    .sync-status.err { color: var(--danger); }
+    .sync-status.syncing { color: var(--muted); font-size: 0.8rem; }
   </style>
 </head>
 <body>
 <main>
-  <h1>QR list scanner <small style="font-weight:400;font-size:.7rem;color:var(--muted)">v21</small></h1>
+  <div class="header-card">
+    <h1>📷 QR List Scanner</h1>
+    <span class="ver-pill">v22</span>
+  </div>
 
-  <div class="cam" id="cam">
-    <div class="session-overlay" id="sessionOverlay">
-      <span id="overlaySessionText"></span>
-      <span class="overlay-badge" id="overlayCount">0</span>
+  <div class="glass-card">
+    <div class="cam" id="cam">
+      <div class="session-overlay" id="sessionOverlay">
+        <span id="overlaySessionText"></span>
+        <span class="overlay-badge" id="overlayCount">0</span>
+      </div>
+      <video id="video" playsinline muted></video>
+      <div class="frame"></div>
+      <div class="hint">Tap “Start camera”, then point it at a QR code.</div>
     </div>
-    <video id="video" playsinline muted></video>
-    <div class="frame"></div>
-    <div class="hint">Tap “Start camera”, then point it at a QR code.</div>
-  </div>
-  <div>
-  <div class="row">
-    <select id="sessionSelect" style="flex:1; min-height:44px; padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:var(--surface); color:var(--ink); font:inherit;">
-      <option value="قداس">قداس</option>
-      <option value="ألحان">ألحان</option>
-      <option value="عشية">عشية</option>
-    </select>
-  </div>
-  <div class="row">
-    <button class="primary" id="toggle">Start camera</button>
-    <button id="flip" hidden>Flip</button>
-    <button id="torch" hidden>Flashlight</button>
-  </div>
-  <p class="status" id="status" role="status"></p>
-  
-  <div class="row" style="align-items:stretch;">
-    <input type="text" id="manual" dir="auto" placeholder="Type a name" autocomplete="off" enterkeyhint="done" aria-label="Type a name">
-    
-    <input type="checkbox" id="forgotCard" hidden>
-    <label for="forgotCard" class="forgot-btn">نسي الكارت؟</label>
 
-    <button id="addManual">Add</button>
+    <div class="row">
+      <select id="sessionSelect">
+        <option value="قداس">قداس</option>
+        <option value="ألحان">ألحان</option>
+        <option value="عشية">عشية</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <button class="primary" id="toggle">Start camera</button>
+      <button id="flip" hidden>Flip</button>
+      <button id="torch" hidden>Flashlight</button>
+    </div>
+
+    <p class="status" id="status" role="status"></p>
+
+    <div class="row" style="align-items:stretch;">
+      <input type="text" id="manual" dir="auto" placeholder="Type a name" autocomplete="off" enterkeyhint="done" aria-label="Type a name">
+      <input type="checkbox" id="forgotCard" hidden>
+      <label for="forgotCard" class="forgot-btn">نسي الكارت؟</label>
+      <button id="addManual">Add</button>
+    </div>
   </div>
 
-  <div class="head">
-    <h2>Scanned codes</h2>
-    <span class="count" id="count">0</span>
-  </div>
-  <div class="row">
-    <button id="copyAll">Copy all</button>
-    <button id="clear">Clear list</button>
-  </div>
-  <ul id="list"></ul>
+  <div class="glass-card">
+    <div class="head">
+      <h2>Scanned codes</h2>
+      <span class="count" id="count">0</span>
+    </div>
+    <div class="row" style="margin-top:0;">
+      <button id="copyAll" style="flex:1;">Copy all</button>
+      <button id="clear" style="flex:1; background:rgba(239,68,68,0.12); color:var(--danger); border-color:rgba(239,68,68,0.3);">Clear list</button>
+    </div>
+    <ul id="list"></ul>
   </div>
 </main>
 
@@ -321,13 +464,11 @@
       } else {
         
         // ---- THE 5-SECOND SHIELD ----
-        // If this is the exact same card we JUST added, give the user 5 seconds to move their hand away
         if (text === lastAddedText && (now - lastAddedTime < 5000)) {
-           lastErrorText = text; // Keep tracking so we don't beep immediately when the 5s ends
+           lastErrorText = text;
            return; 
         }
 
-        // If we made it here, the shield is expired (or it's a completely different duplicate card)
         cam.classList.add('hold-err');
         if (text !== lastErrorText) {
           setStatus('Already in the list: ' + (text.length > 60 ? text.slice(0,60) + '\u2026' : text), true);
@@ -342,7 +483,7 @@
     // ---- SUCCESSFUL NEW SCAN ----
     lastAddedText = text; 
     lastAddedTime = now;
-    lastErrorText = text; // Prevent instant error beeping if they hold it past 5s
+    lastErrorText = text;
     
     var entry = { text: text, t: now }; if (manual) entry.m = 1;
     items.unshift(entry);
@@ -392,7 +533,6 @@
           clearTimeout(codeGoneTimer);
           add(text);
           
-          // Debounce: if 600ms pass without ANY text detected, drop the error screen & reset memory
           codeGoneTimer = setTimeout(function(){
             cam.classList.remove('hold-err');
             lastErrorText = ''; 
@@ -651,7 +791,6 @@ window.addEventListener('load', flushQueue);
 async function onScan(code, isForgot) {
   var session = document.getElementById('sessionSelect').value;
   updateItemStatus(code, '⌛', 'syncing');
-  // Force forgotCard to false for QR scans
   const result = await submit({ code: code, session: session, forgotCard: false });
   showResult(code, result);
 }
@@ -671,7 +810,7 @@ function showResult(text, r) {
     var cam = document.getElementById('cam');
     if (cam) {
       cam.classList.remove('flash-err');
-      void cam.offsetWidth; // reflow
+      void cam.offsetWidth;
       cam.classList.add('flash-err');
       setTimeout(function(){ cam.classList.remove('flash-err'); }, 400);
     }
